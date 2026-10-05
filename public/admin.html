@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>管理后台</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="wrap" id="adminAuth">
+  <h2>管理员登录</h2>
+  <input type="text" id="adminUser" placeholder="管理员用户名">
+  <input type="password" id="adminPwd" placeholder="密码">
+  <button onclick="adminLogin()">登录</button>
+  <div class="msg" id="adminMsg"></div>
+</div>
+
+<div id="adminApp" style="display:none;max-width:1000px;margin:20px auto;padding:0 20px;">
+  <h2 style="margin-bottom:16px;">🔧 管理后台</h2>
+
+  <div class="section">
+    <h3>创建 API Key</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="number" id="keyLimit" placeholder="额度（默认100000）" style="flex:1;min-width:150px;">
+      <input type="text" id="keyNote" placeholder="备注" style="flex:1;min-width:150px;">
+      <button onclick="createKey()" style="width:auto;padding:10px 20px;">创建</button>
+    </div>
+    <div class="msg" id="keyMsg" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>Key 列表 <button onclick="loadKeys()" style="width:auto;padding:4px 12px;font-size:12px;">刷新</button></h3>
+    <div id="keyList"></div>
+  </div>
+
+  <div class="section">
+    <h3>生成兑换码</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input type="number" id="giftCount" placeholder="数量" style="flex:1;min-width:120px;">
+      <input type="number" id="giftTokens" placeholder="额度" style="flex:1;min-width:120px;">
+      <button onclick="createGifts()" style="width:auto;padding:10px 20px;">生成</button>
+    </div>
+    <div class="msg" id="giftMsg" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>兑换码列表 <button onclick="loadGifts()" style="width:auto;padding:4px 12px;font-size:12px;">刷新</button></h3>
+    <div id="giftList" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script src="/admin.js"></script>
+</body>
+</html>
