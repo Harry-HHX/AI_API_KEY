@@ -4,6 +4,19 @@ export async function onRequest(context) {
   const path = url.pathname;
   const method = request.method;
 
+  // 处理 OPTIONS 预检
+  if (method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Credentials': 'true'
+      }
+    });
+  }
+
   // 非 API 请求 → 交给 Pages 静态文件
   if (!path.startsWith('/api/') && !path.startsWith('/v1/')) {
     return context.next();
@@ -30,7 +43,11 @@ export async function onRequest(context) {
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' }
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': 'true'
+    }
   });
 }
 
@@ -40,8 +57,9 @@ function getCookie(request, name) {
   return match ? match[2] : null;
 }
 
+// ✅ 改动1：Secure + SameSite=None，手机浏览器不丢 Cookie
 function setCookieHeader(name, value, maxAge) {
-  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${maxAge}`;
 }
 
 // ===== 注册 =====
@@ -62,13 +80,11 @@ async function handleRegister(request, env) {
     usedTokens: 0, tokenLimit: 1000000
   }));
 
-  // 创建主 Key
   const apiKey = 'sk_' + crypto.randomUUID().replace(/-/g, '');
   await env.API_KEYS.put('user:' + username + ':primary', JSON.stringify({
     key: apiKey, isPrimary: true, tokenLimit: 1000000, usedTokens: 0, createdAt: Date.now()
   }));
 
-  // 自动登录
   const sessToken = crypto.randomUUID();
   await env.USERS.put('sess:' + sessToken, JSON.stringify({ username, createdAt: Date.now() }), { expirationTtl: 604800 });
 
@@ -91,7 +107,6 @@ async function handleLogin(request, env) {
   const sessToken = crypto.randomUUID();
   await env.USERS.put('sess:' + sessToken, JSON.stringify({ username, createdAt: Date.now() }), { expirationTtl: 604800 });
 
-  // 拿主 Key
   let apiKey = '';
   const keys = await env.API_KEYS.list({ prefix: 'user:' + username + ':' });
   for (let k of keys.keys) {
@@ -280,7 +295,6 @@ async function handleModels(request, env) {
   if (!auth || !auth.startsWith('Bearer ')) return json({ error: '需要API Key' }, 401);
   const key = auth.slice(7);
 
-  // 验证 key
   let keyValid = false;
   const allKeys = await env.API_KEYS.list();
   for (let k of allKeys.keys) {
@@ -304,7 +318,6 @@ async function handleChat(request, env) {
   if (!auth || !auth.startsWith('Bearer ')) return json({ error: '需要API Key' }, 401);
   const key = auth.slice(7);
 
-  // 验证 key + 额度
   let keyData = null;
   let keyName = null;
   const allKeys = await env.API_KEYS.list();
@@ -326,7 +339,6 @@ async function handleChat(request, env) {
     body: JSON.stringify(body)
   });
 
-  // 非流式直接返回
   if (!body.stream) {
     const resData = await upstreamRes.json();
     const used = resData.usage?.total_tokens || 0;
@@ -335,7 +347,6 @@ async function handleChat(request, env) {
     return new Response(JSON.stringify(resData), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // 流式透传
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const reader = upstreamRes.body.getReader();
