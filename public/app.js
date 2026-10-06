@@ -37,7 +37,9 @@ document.getElementById('authBtn').onclick = function() {
     } else {
       document.getElementById('authMsg').textContent = d.error;
     }
-  }).catch(function() { document.getElementById('authMsg').textContent = '网络错误'; });
+  }).catch(function(e) {
+    document.getElementById('authMsg').textContent = '出错：' + (e && e.message ? e.message : e);
+  });
 };
 
 // 自动检查登录
