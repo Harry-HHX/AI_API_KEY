@@ -4,7 +4,12 @@ function api(path, opts) {
   opts = opts || {};
   opts.credentials = 'include';
   return fetch(path, opts).then(function(r) {
-    if (r.status === 401) { location.reload(); return Promise.reject(); }
+    if (r.status === 401) {
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('auth').style.display = 'block';
+      document.getElementById('authMsg').textContent = '登录已过期，请重新登录';
+      return Promise.reject();
+    }
     return r;
   });
 }
