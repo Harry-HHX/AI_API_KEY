@@ -1,4 +1,4 @@
-var WORKER = 'https://ai-api-key.harry-hhx.workers.dev';
+var WORKER = '';
 
 function api(path, opts) {
   opts = opts || {};
