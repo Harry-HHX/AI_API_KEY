@@ -1,75 +1,47 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>AI 平台</title>
-<link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI API Key 分发平台</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="container">
+    <h1>AI API Key 平台</h1>
 
-<div class="wrap" id="auth">
-  <h2 id="authTitle">登录</h2>
-  <input type="text" id="user" placeholder="用户名">
-  <input type="password" id="pwd" placeholder="密码">
-  <button id="authBtn">登录</button>
-  <div class="tip" id="authSwitch">没有账号？去注册</div>
-  <div class="msg" id="authMsg"></div>
-</div>
-
-<div id="app">
-  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-    <button onclick="showPanel('keys')" style="width:auto;padding:8px 16px;">🔑 Key 管理</button>
-    <button onclick="showPanel('chat')" style="width:auto;padding:8px 16px;">💬 聊天</button>
-    <button onclick="showPanel('account')" style="width:auto;padding:8px 16px;">👤 账户</button>
-    <button onclick="logout()" style="width:auto;padding:8px 16px;background:rgba(255,50,50,0.3);">退出</button>
-  </div>
-
-  <div id="keysPanel" class="panel active">
-    <div class="redeem-row">
-      <input type="text" id="redeemCode" placeholder="输入兑换码">
-      <button onclick="redeem()">兑换</button>
+    <!-- 登录 -->
+    <div id="loginSection">
+      <h2>登录</h2>
+      <input type="text" id="username" placeholder="用户名"><br><br>
+      <input type="password" id="password" placeholder="密码"><br><br>
+      <button onclick="login()">登录</button>
     </div>
-    <button class="primary" onclick="createKey()" style="margin-bottom:12px;">➕ 创建新 Key</button>
-    <div id="keyList"></div>
-  </div>
 
-  <div id="chatPanel" class="panel">
-    <div class="controls">
-      <input type="password" id="apiKeyInput" placeholder="点击 Key 的「使用」填入" readonly>
-      <button onclick="loadModels()">加载模型</button>
-      <select id="model"><option value="">先加载模型</option></select>
-    </div>
-    <div class="chat-box" id="chatArea"></div>
-    <div class="input-row">
-      <textarea id="message" placeholder="输入消息... Enter 发送"></textarea>
-      <button onclick="send()">发送</button>
+    <!-- 主界面 -->
+    <div id="mainSection" style="display:none;">
+      <h2>使用</h2>
+      <input type="text" id="apiKey" placeholder="输入你的 API Key"><br><br>
+
+      <div class="model-section">
+        <button id="loadModelsBtn" onclick="loadModels()">加载模型</button>
+        <span id="modelLoading" style="display:none; margin-left: 8px;">
+          <span class="spinner"></span> 请求中...
+        </span>
+        <select id="modelSelect" style="display:none; margin-left: 8px;">
+          <option value="">-- 请选择模型 --</option>
+        </select>
+      </div>
+
+      <br><br>
+      <textarea id="messageInput" placeholder="输入你的问题..." rows="4" cols="50"></textarea><br><br>
+      <button onclick="sendMessage()">发送</button>
+
+      <h3>回复：</h3>
+      <pre id="output"></pre>
     </div>
   </div>
 
-  <div id="accountPanel" class="panel">
-    <div class="section">
-      <h3>用户信息</h3>
-      <div class="row"><span>用户名</span><span id="accUser"></span></div>
-      <div class="row"><span>昵称</span><span id="accNick"></span></div>
-      <div class="row"><span>已用 Token</span><span id="accUsed"></span></div>
-      <div class="row"><span>总 Token</span><span id="accTotal"></span></div>
-    </div>
-    <div class="section">
-      <h3>设置昵称</h3>
-      <input type="text" id="nickname" placeholder="昵称">
-      <button onclick="saveNick()">保存</button>
-    </div>
-    <div class="section">
-      <h3>修改密码</h3>
-      <input type="password" id="oldPwd" placeholder="旧密码">
-      <input type="password" id="newPwd" placeholder="新密码">
-      <input type="password" id="confirmPwd" placeholder="确认">
-      <button onclick="changePwd()">修改</button>
-    </div>
-  </div>
-</div>
-
-<script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
