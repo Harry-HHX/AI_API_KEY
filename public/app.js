@@ -14,7 +14,8 @@ async function login() {
   });
 
   const data = await res.json();
-  if (res.ok) {
+  if (res.ok && data.token) {
+    localStorage.setItem('auth_token', data.token);
     document.getElementById('loginSection').style.display = 'none';
     document.getElementById('mainSection').style.display = 'block';
   } else {
@@ -25,6 +26,11 @@ async function login() {
 // ========== 获取 API Key ==========
 function getApiKey() {
   return document.getElementById('apiKey').value.trim();
+}
+
+// ========== 获取用户 Token ==========
+function getAuthToken() {
+  return localStorage.getItem('auth_token') || '';
 }
 
 // ========== 加载模型 ==========
@@ -41,7 +47,9 @@ async function loadModels() {
 
   try {
     const res = await fetch(WORKER + '/v1/models', {
-      headers: { 'Authorization': 'Bearer ' + getApiKey() }
+      headers: {
+        'Authorization': 'Bearer ' + getApiKey()
+      }
     });
     const data = await res.json();
 
