@@ -36,13 +36,38 @@ async function handleLogin(request, env) {
   if (user.password !== password) return json({ error: '密码错误' }, 401);
   const token = crypto.randomUUID();
   await env.USERS.put(username, JSON.stringify({ ...user, token }));
-  return new Response(JSON.stringify({ token }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Set-Cookie': `auth_token=${token}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`
+  // 不再设 Cookie，只返回 token
+  return json({ token });
+}
+
+async function verifyAuth(request, env) {
+  // 先从 Authorization 头读
+  const auth = request.headers.get('Authorization');
+  if (auth && auth.startsWith('Bearer ')) {
+    const token = auth.slice(7);
+    const allUsers = await env.USERS.list();
+    for (const u of allUsers.keys) {
+      const d = await env.USERS.get(u.name);
+      if (d) {
+        const user = JSON.parse(d);
+        if (user.token === token) return user;
+      }
     }
-  });
+  }
+  // 兜底：从 Cookie 读
+  const cookie = request.headers.get('Cookie') || '';
+  const match = cookie.match(/auth_token=([^;]+)/);
+  if (!match) return null;
+  const token = match[1];
+  const allUsers = await env.USERS.list();
+  for (const u of allUsers.keys) {
+    const d = await env.USERS.get(u.name);
+    if (d) {
+      const user = JSON.parse(d);
+      if (user.token === token) return user;
+    }
+  }
+  return null;
 }
 
 async function handleModels(request, env) {
