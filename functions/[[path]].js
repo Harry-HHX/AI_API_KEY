@@ -40,7 +40,7 @@ async function handleLogin(request, env) {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
-      'Set-Cookie': `auth_token=${token}; HttpOnly; Path=/; Max-Age=86400; Secure; SameSite=None`
+      'Set-Cookie': `auth_token=${token}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`
     }
   });
 }
