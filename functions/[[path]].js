@@ -58,7 +58,6 @@ async function handleModels(request, env) {
   }
   if (!ok) return json({ error: '无效的API Key' }, 401);
 
-  // 随机 1~10 秒延迟
   await new Promise(r => setTimeout(r, Math.floor(Math.random() * 9000) + 1000));
 
   return json({ data: WORKERS_AI_MODELS.map(m => ({ id: m.id, name: m.name })) });
@@ -164,5 +163,6 @@ export async function onRequest(context) {
   if (path === '/v1/models' && request.method === 'GET') return handleModels(request, env);
   if (path === '/v1/chat/completions' && request.method === 'POST') return handleChat(request, env);
 
-  return json({ error: 'Not Found' }, 404);
+  // 静态文件回退
+  return fetch(request);
 }
