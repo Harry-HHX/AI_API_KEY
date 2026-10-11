@@ -2,9 +2,6 @@
 // D1 绑定名: DB
 // KV 绑定名: USERS (仅用于 session 存储)
 // 环境变量: WORKER (TOTP AES-GCM 加密密钥), GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
-
-import { verifyTOTP, generateTOTPSecret } from './totp.js'; // 如果你有独立totp模块，没有就用下面内联版
-
 // ============ 工具函数 ============
 function b64urlEncode(buf) {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
