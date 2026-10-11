@@ -14,6 +14,14 @@ function json(data, status = 200) {
   });
 }
 
+// HTML 响应（用于回调页面）
+function html(content, status = 200) {
+  return new Response(content, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}
+
 function friendlyError(status, body) {
   if (status === 4006 || (body && body.includes && (body.includes('neurons') || body.includes('daily')))) {
     return { error: '免费额度已用完，明天 UTC 0 点重置，或联系管理员升级' };
@@ -36,12 +44,155 @@ async function handleLogin(request, env) {
   if (user.password !== password) return json({ error: '密码错误' }, 401);
   const token = crypto.randomUUID();
   await env.USERS.put(username, JSON.stringify({ ...user, token }));
-  // 不再设 Cookie，只返回 token
   return json({ token });
 }
 
+// GitHub OAuth 发起授权
+async function handleGitHubAuth(request, env) {
+  const clientId = env.GITHUB_CLIENT_ID;
+  if (!clientId) return html('<h1>错误：未配置 GITHUB_CLIENT_ID</h1>', 500);
+
+  const redirectUri = new URL(request.url).origin + '/auth/callback';
+  const scope = 'read:user user:email';
+  const state = crypto.randomUUID();
+
+  // 把 state 存到 KV 里防 CSRF（5分钟过期）
+  await env.USERS.put('oauth_state:' + state, '1', { expirationTtl: 300 });
+
+  const authUrl = `https://github.com/login/oauth/authorize` +
+    `?client_id=${encodeURIComponent(clientId)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=${encodeURIComponent(scope)}` +
+    `&state=${encodeURIComponent(state)}`;
+
+  return new Response(null, {
+    status: 302,
+    headers: { 'Location': authUrl }
+  });
+}
+
+// GitHub OAuth 回调
+async function handleGitHubCallback(request, env) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  const error = url.searchParams.get('error');
+
+  if (error) {
+    return html(`<h1>授权被拒绝：${error}</h1><p><a href="/">返回首页</a></p>`, 400);
+  }
+
+  if (!code || !state) {
+    return html('<h1>错误：缺少 code 或 state 参数</h1>', 400);
+  }
+
+  // 验证 state 防 CSRF
+  const savedState = await env.USERS.get('oauth_state:' + state);
+  if (!savedState) {
+    return html('<h1>错误：state 验证失败，请重试</h1>', 403);
+  }
+  await env.USERS.delete('oauth_state:' + state);
+
+  const clientId = env.GITHUB_CLIENT_ID;
+  const clientSecret = env.GITHUB_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return html('<h1>错误：未配置 GitHub OAuth 凭证</h1>', 500);
+  }
+
+  // 用 code 换 access_token
+  let tokenRes;
+  try {
+    tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code,
+        redirect_uri: url.origin + '/auth/callback'
+      })
+    });
+  } catch (e) {
+    return html('<h1>错误：无法连接 GitHub</h1>', 502);
+  }
+
+  const tokenData = await tokenRes.json();
+  if (tokenData.error) {
+    return html(`<h1>Token 获取失败：${tokenData.error_description || tokenData.error}</h1>`, 400);
+  }
+
+  const accessToken = tokenData.access_token;
+  if (!accessToken) {
+    return html('<h1>错误：未获取到 access_token</h1>', 400);
+  }
+
+  // 用 access_token 拿用户信息
+  let userRes;
+  try {
+    userRes = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      }
+    });
+  } catch (e) {
+    return html('<h1>错误：无法获取 GitHub 用户信息</h1>', 502);
+  }
+
+  const ghUser = await userRes.json();
+  if (!ghUser.login) {
+    return html('<h1>错误：GitHub 用户数据异常</h1>', 400);
+  }
+
+  // 查/创建用户
+  const ghUsername = 'gh_' + ghUser.login;
+  let userData = await env.USERS.get(ghUsername);
+
+  if (!userData) {
+    // 新用户，自动创建
+    const newUser = {
+      username: ghUsername,
+      password: crypto.randomUUID(), // 随机密码，GitHub 用户不需要
+      token: crypto.randomUUID(),
+      provider: 'github',
+      githubId: ghUser.id,
+      avatar: ghUser.avatar_url,
+      createdAt: Date.now()
+    };
+    await env.USERS.put(ghUsername, JSON.stringify(newUser));
+    userData = JSON.stringify(newUser);
+  }
+
+  const user = JSON.parse(userData);
+  const authToken = user.token || crypto.randomUUID();
+  user.token = authToken;
+  await env.USERS.put(ghUsername, JSON.stringify(user));
+
+  // 返回 HTML 页面，把 token 写入 localStorage 然后跳首页
+  const redirectPage = `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>登录成功</title>
+</head>
+<body>
+<script>
+localStorage.setItem('auth_token', '${authToken}');
+window.location.href = '/';
+</script>
+<p>登录成功，正在跳转...</p>
+</body>
+</html>`;
+
+  return html(redirectPage);
+}
+
 async function verifyAuth(request, env) {
-  // 先从 Authorization 头读
   const auth = request.headers.get('Authorization');
   if (auth && auth.startsWith('Bearer ')) {
     const token = auth.slice(7);
@@ -54,7 +205,6 @@ async function verifyAuth(request, env) {
       }
     }
   }
-  // 兜底：从 Cookie 读
   const cookie = request.headers.get('Cookie') || '';
   const match = cookie.match(/auth_token=([^;]+)/);
   if (!match) return null;
@@ -184,7 +334,10 @@ export async function onRequest(context) {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type,Authorization' } });
   }
 
+  // 路由
   if (path === '/api/login' && request.method === 'POST') return handleLogin(request, env);
+  if (path === '/auth/github' && request.method === 'GET') return handleGitHubAuth(request, env);
+  if (path === '/auth/callback' && request.method === 'GET') return handleGitHubCallback(request, env);
   if (path === '/v1/models' && request.method === 'GET') return handleModels(request, env);
   if (path === '/v1/chat/completions' && request.method === 'POST') return handleChat(request, env);
 
