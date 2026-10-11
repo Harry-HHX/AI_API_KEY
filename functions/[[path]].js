@@ -71,7 +71,7 @@ export async function onRequest(context) {
       const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
       const secret = new TextDecoder().decode(decrypted);
       // 生成 TOTP
-      const epoch = Math.floor(Date.now() / 30000);
+      let epoch = Math.floor(Date.now() / 30000);
       const h = new Uint8Array(8);
       for (let i = 7; i >= 0; i--, epoch >>= 8) h[i] = epoch & 0xff;
       const key2 = await crypto.subtle.importKey('raw', Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
@@ -220,7 +220,7 @@ export async function onRequest(context) {
     const iv = encrypted.slice(0, 12); const data = encrypted.slice(12);
     const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
     const secret = new TextDecoder().decode(decrypted);
-    const epoch = Math.floor(Date.now() / 30000);
+    let epoch = Math.floor(Date.now() / 30000);
     const h = new Uint8Array(8);
     for (let i = 7; i >= 0; i--, epoch >>= 8) h[i] = epoch & 0xff;
     const key2 = await crypto.subtle.importKey('raw', Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
