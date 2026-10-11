@@ -1,12 +1,14 @@
 // functions/[[path]].js
-// AI-CHAT 私有站点后端
-// KV 绑定名: HE_SITE_KV
+// AI-CHAT 完整版后端
+// KV: USERS / API_KEYS / GIFT_CODE
+// 变量: WORKER / CF_ACCOUNT_ID / CF_API_TOKEN / GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 
 /// ============ 配置 ============
 const SESSION_TTL = 60 * 60 * 24 * 7;
 const TOTP_WINDOW = 1;
 const TOTP_RATE_LIMIT = 5;
 const TRIAL_DAYS = 7;
+const DAILY_LIMIT_NO_2FA = 20;
 
 const WORKERS_AI_MODELS = [
   { id: '@cf/deepseek-ai/deepseek-v4-flash-0731', name: 'DeepSeek V4 Flash' },
@@ -30,7 +32,7 @@ function b64url_decode(s) {
 }
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
-    status, headers: { 'Content-Type': 'application/json' }
+    status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
   });
 }
 function html(content, status = 200) {
@@ -45,6 +47,10 @@ function randBase32(len = 32) {
   for (let i = 0; i < len; i++) s += chars[bytes[i] % 32];
   return s;
 }
+function randToken(len = 24) {
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  return b64url_encode(bytes);
+}
 function getCookie(req, name) {
   const cookie = req.headers.get('Cookie') || '';
   const m = cookie.match(new RegExp('(^|; )' + name + '=([^;]*)'));
@@ -54,7 +60,7 @@ function setCookie(name, value, maxAge) {
   return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax`;
 }
 
-/// ============ 密码哈希 (Web Crypto, SHA-256) ============
+/// ============ 密码哈希 ============
 async function hashPassword(password, salt) {
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(salt + password),
@@ -114,34 +120,91 @@ async function totpVerify(secretBase32, inputCode) {
   return false;
 }
 
-/// ============ KV ============
+/// ============ KV 操作 ============
+// USERS
 async function getUser(env, username) {
-  const d = await env.HE_SITE_KV.get('user:' + username);
+  const d = await env.USERS.get('user:' + username);
   return d ? JSON.parse(d) : null;
 }
 async function putUser(env, username, user) {
-  await env.HE_SITE_KV.put('user:' + username, JSON.stringify(user));
+  await env.USERS.put('user:' + username, JSON.stringify(user));
 }
 async function getSession(env, sid) {
-  const d = await env.HE_SITE_KV.get('sess:' + sid);
+  const d = await env.USERS.get('sess:' + sid);
   return d ? JSON.parse(d) : null;
 }
 async function putSession(env, sid, sess) {
-  await env.HE_SITE_KV.put('sess:' + sid, JSON.stringify(sess), { expirationTtl: SESSION_TTL });
+  await env.USERS.put('sess:' + sid, JSON.stringify(sess), { expirationTtl: SESSION_TTL });
+}
+
+// API_KEYS
+async function createApiKey(env, username) {
+  const key = 'sk_' + randToken(28);
+  await env.API_KEYS.put('key:' + key, JSON.stringify({ username, createdAt: Date.now(), active: true }));
+  const existing = await env.API_KEYS.get('user_keys:' + username);
+  const keys = existing ? JSON.parse(existing) : [];
+  keys.push(key);
+  await env.API_KEYS.put('user_keys:' + username, JSON.stringify(keys));
+  return key;
+}
+async function getUserKeys(env, username) {
+  const d = await env.API_KEYS.get('user_keys:' + username);
+  return d ? JSON.parse(d) : [];
+}
+async function validateApiKey(env, key) {
+  const d = await env.API_KEYS.get('key:' + key);
+  if (!d) return null;
+  const info = JSON.parse(d);
+  return info.active ? info : null;
+}
+async function getQuota(env, username) {
+  const today = new Date().toISOString().slice(0, 10);
+  const d = await env.API_KEYS.get('quota:' + username + ':' + today);
+  return d ? JSON.parse(d) : { used: 0, date: today };
+}
+async function incQuota(env, username) {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = 'quota:' + username + ':' + today;
+  const d = await env.API_KEYS.get(key);
+  const q = d ? JSON.parse(d) : { used: 0, date: today };
+  q.used++;
+  await env.API_KEYS.put(key, JSON.stringify(q), { expirationTtl: 86400 * 2 });
+  return q;
+}
+
+// GIFT_CODE
+async function getGiftCode(env, code) {
+  const d = await env.GIFT_CODE.get('code:' + code);
+  return d ? JSON.parse(d) : null;
+}
+async function useGiftCode(env, code, username) {
+  const gift = await getGiftCode(env, code);
+  if (!gift) return { ok: false, msg: '礼品码不存在' };
+  if (gift.used) return { ok: false, msg: '礼品码已被使用' };
+  gift.used = true;
+  gift.usedBy = username;
+  gift.usedAt = Date.now();
+  await env.GIFT_CODE.put('code:' + code, JSON.stringify(gift));
+  const record = { code, type: gift.type, value: gift.value, at: Date.now() };
+  const existing = await env.GIFT_CODE.get('user_gifts:' + username);
+  const gifts = existing ? JSON.parse(existing) : [];
+  gifts.push(record);
+  await env.GIFT_CODE.put('user_gifts:' + username, JSON.stringify(gifts));
+  return { ok: true, gift };
 }
 
 /// ============ 路由 ============
 
-// 密码注册
+// 注册
 async function handleRegister(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, msg: '格式错误' }, 400); }
   const { username, password } = body;
   if (!username || !password) return json({ ok: false, msg: '用户名和密码不能为空' }, 400);
   if (password.length < 6) return json({ ok: false, msg: '密码至少6位' }, 400);
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return json({ ok: false, msg: '用户名3-20位，仅字母数字下划线' }, 400);
 
-  const existing = await getUser(env, username);
-  if (existing) return json({ ok: false, msg: '用户已存在' }, 409);
+  if (await getUser(env, username)) return json({ ok: false, msg: '用户已存在' }, 409);
 
   const salt = b64url_encode(crypto.getRandomValues(new Uint8Array(16)));
   const hash = await hashPassword(password, salt);
@@ -152,10 +215,19 @@ async function handleRegister(request, env) {
   };
   await putUser(env, username, user);
 
+  // 自动生成 API Key
+  const apiKey = await createApiKey(env, username);
+
   const sessionId = b64url_encode(crypto.getRandomValues(new Uint8Array(32)));
   await putSession(env, sessionId, { username, createdAt: now });
 
-  return json({ ok: true, msg: '注册成功' }, 201, { 'Set-Cookie': setCookie('session_id', sessionId, SESSION_TTL) });
+  return new Response(JSON.stringify({ ok: true, msg: '注册成功', api_key: apiKey }), {
+    status: 201,
+    headers: {
+      'Content-Type': 'application/json',
+      'Set-Cookie': setCookie('session_id', sessionId, SESSION_TTL)
+    }
+  });
 }
 
 // 密码登录
@@ -174,7 +246,7 @@ async function handlePasswordLogin(request, env) {
   const sessionId = b64url_encode(crypto.getRandomValues(new Uint8Array(32)));
   await putSession(env, sessionId, { username, createdAt: Date.now() });
 
-  return new Response(JSON.stringify({ ok: true, msg: '登录成功' }), {
+  return new Response(JSON.stringify({ ok: true, msg: '登录成功', totp_enabled: user.totp_enabled }), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
@@ -189,7 +261,7 @@ async function handleGitHubAuth(request, env) {
   if (!clientId) return json({ ok: false, msg: '未配置 GITHUB_CLIENT_ID' }, 500);
   const redirectUri = new URL(request.url).origin + '/auth/callback';
   const state = b64url_encode(crypto.getRandomValues(new Uint8Array(16)));
-  await env.HE_SITE_KV.put('oauth_state:' + state, '1', { expirationTtl: 300 });
+  await env.USERS.put('oauth_state:' + state, '1', { expirationTtl: 300 });
   const authUrl = `https://github.com/login/oauth/authorize` +
     `?client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -204,9 +276,9 @@ async function handleGitHubCallback(request, env) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   if (!code) return html('<h1>授权失败</h1>', 400);
-  const saved = await env.HE_SITE_KV.get('oauth_state:' + state);
+  const saved = await env.USERS.get('oauth_state:' + state);
   if (!saved) return html('<h1>state验证失败</h1>', 403);
-  await env.HE_SITE_KV.delete('oauth_state:' + state);
+  await env.USERS.delete('oauth_state:' + state);
 
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -224,19 +296,19 @@ async function handleGitHubCallback(request, env) {
   const now = Date.now();
 
   let user = await getUser(env, login);
+  const isNew = !user;
   if (!user) {
-    // 首次登录 → 自动创建
     user = {
       username: login, provider: 'github', githubId: gh.id, avatar: gh.avatar_url,
       createdAt: now, firstLoginAt: now, totp_enabled: false, trial_start: now
     };
     await putUser(env, login, user);
+    await createApiKey(env, login);
   }
 
   const sessionId = b64url_encode(crypto.getRandomValues(new Uint8Array(32)));
   await putSession(env, sessionId, { username: login, createdAt: now });
 
-  // 跳转前端，前端根据 totp_enabled 决定弹窗
   const redirectPage = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -245,7 +317,7 @@ async function handleGitHubCallback(request, env) {
 <script>
 localStorage.setItem('logged_in','true');
 localStorage.setItem('username', ${JSON.stringify(login)});
-${user.totp_enabled ? `localStorage.setItem('need_totp_verify','true');` : `localStorage.setItem('need_2fa_setup','true');`}
+${user.totp_enabled ? `localStorage.setItem('need_totp_verify','true');` : `localStorage.setItem('need_2fa_setup','${isNew ? 'true' : 'false'}');`}
 location.href='/';
 </script>
 </body>
@@ -260,7 +332,7 @@ location.href='/';
   });
 }
 
-// TOTP 校验（已绑用户每次登录）
+// TOTP 校验
 async function handleTotpVerify(request, env) {
   const sid = getCookie(request, 'session_id');
   if (!sid) return json({ ok: false, msg: '未登录' }, 401);
@@ -273,25 +345,24 @@ async function handleTotpVerify(request, env) {
   const user = await getUser(env, sess.username);
   if (!user || !user.totp_enabled) return json({ ok: false, msg: '未启用2FA' }, 400);
 
-  // 频率限制
   const rateKey = 'totp_rate:' + sess.username;
-  const rateData = await env.HE_SITE_KV.get(rateKey);
+  const rateData = await env.USERS.get(rateKey);
   let attempts = 0;
   if (rateData) { const rd = JSON.parse(rateData); if (Date.now() - rd.since < 60000) attempts = rd.count; }
   if (attempts >= TOTP_RATE_LIMIT) return json({ ok: false, msg: '尝试次数过多，请60秒后再试' }, 429);
-  await env.HE_SITE_KV.put(rateKey, JSON.stringify({ since: Date.now(), count: attempts + 1 }), { expirationTtl: 60 });
+  await env.USERS.put(rateKey, JSON.stringify({ since: Date.now(), count: attempts + 1 }), { expirationTtl: 60 });
 
-  const plainSecret = await aesDecrypt(user.totp_secret, user.username + ':' + (env.CF_API_TOKEN || 'default'));
+  const plainSecret = await aesDecrypt(user.totp_secret, user.username + ':' + (env.WORKER || 'default'));
   if (!plainSecret) return json({ ok: false, msg: '解密失败' }, 500);
 
   const valid = await totpVerify(plainSecret, code);
   if (!valid) return json({ ok: false, msg: '验证码错误' }, 401);
 
-  await env.HE_SITE_KV.delete(rateKey);
+  await env.USERS.delete(rateKey);
   return json({ ok: true, msg: '验证通过' });
 }
 
-// 生成 TOTP secret
+// TOTP 生成 secret
 async function handleTotpSetup(request, env) {
   const sid = getCookie(request, 'session_id');
   if (!sid) return json({ ok: false, msg: '未登录' }, 401);
@@ -300,8 +371,6 @@ async function handleTotpSetup(request, env) {
 
   const secret = randBase32(32);
   const user = await getUser(env, sess.username);
-  if (!user) return json({ ok: false, msg: '用户不存在' }, 404);
-
   user.totp_secret_temp = secret;
   await putUser(env, sess.username, user);
 
@@ -309,7 +378,7 @@ async function handleTotpSetup(request, env) {
   return json({ ok: true, secret, otpauth });
 }
 
-// 确认绑定 TOTP
+// TOTP 确认绑定
 async function handleTotpEnable(request, env) {
   const sid = getCookie(request, 'session_id');
   if (!sid) return json({ ok: false, msg: '未登录' }, 401);
@@ -325,7 +394,7 @@ async function handleTotpEnable(request, env) {
   const valid = await totpVerify(user.totp_secret_temp, code);
   if (!valid) return json({ ok: false, msg: '验证码错误' }, 401);
 
-  const encrypted = await aesEncrypt(user.totp_secret_temp, user.username + ':' + (env.CF_API_TOKEN || 'default'));
+  const encrypted = await aesEncrypt(user.totp_secret_temp, user.username + ':' + (env.WORKER || 'default'));
   user.totp_secret = encrypted;
   user.totp_enabled = true;
   delete user.totp_secret_temp;
@@ -340,16 +409,14 @@ async function handleSkip2FA(request, env) {
   if (!sid) return json({ ok: false, msg: '未登录' }, 401);
   const sess = await getSession(env, sid);
   if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
-
   const user = await getUser(env, sess.username);
   if (!user) return json({ ok: false, msg: '用户不存在' }, 404);
   user.trial_start = user.trial_start || Date.now();
   await putUser(env, sess.username, user);
-
-  return json({ ok: true, msg: '已跳过' });
+  return json({ ok: true });
 }
 
-// 检查用户状态
+// 检查状态
 async function handleCheckStatus(request, env) {
   const sid = getCookie(request, 'session_id');
   if (!sid) return json({ ok: false, msg: '未登录' }, 401);
@@ -372,6 +439,92 @@ async function handleCheckStatus(request, env) {
   });
 }
 
+// API Key 列表
+async function handleApiKeys(request, env) {
+  const sid = getCookie(request, 'session_id');
+  if (!sid) return json({ ok: false, msg: '未登录' }, 401);
+  const sess = await getSession(env, sid);
+  if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
+
+  const keys = await getUserKeys(env, sess.username);
+  return json({ ok: true, keys });
+}
+
+// 生成新 API Key
+async function handleCreateKey(request, env) {
+  const sid = getCookie(request, 'session_id');
+  if (!sid) return json({ ok: false, msg: '未登录' }, 401);
+  const sess = await getSession(env, sid);
+  if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
+
+  const key = await createApiKey(env, sess.username);
+  return json({ ok: true, key });
+}
+
+// 删除 API Key
+async function handleDeleteKey(request, env) {
+  const sid = getCookie(request, 'session_id');
+  if (!sid) return json({ ok: false, msg: '未登录' }, 401);
+  const sess = await getSession(env, sid);
+  if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
+
+  const { key } = await request.json();
+  if (!key) return json({ ok: false, msg: '缺少key' }, 400);
+
+  const info = await validateApiKey(env, key);
+  if (!info || info.username !== sess.username) return json({ ok: false, msg: '无权限' }, 403);
+
+  // 标记为非活跃
+  info.active = false;
+  await env.API_KEYS.put('key:' + key, JSON.stringify(info));
+
+  // 从用户列表移除
+  const keys = await getUserKeys(env, sess.username);
+  const filtered = keys.filter(k => k !== key);
+  await env.API_KEYS.put('user_keys:' + sess.username, JSON.stringify(filtered));
+
+  return json({ ok: true, msg: '已删除' });
+}
+
+// 礼品码兑换
+async function handleRedeemGift(request, env) {
+  const sid = getCookie(request, 'session_id');
+  if (!sid) return json({ ok: false, msg: '未登录' }, 401);
+  const sess = await getSession(env, sid);
+  if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
+
+  const { code } = await request.json();
+  if (!code) return json({ ok: false, msg: '请输入礼品码' }, 400);
+
+  const result = await useGiftCode(env, code, sess.username);
+  if (!result.ok) return json({ ok: false, msg: result.msg }, 400);
+
+  const gift = result.gift;
+  const user = await getUser(env, sess.username);
+
+  // 根据类型发放奖励
+  if (gift.type === 'extra_quota') {
+    // 增加今日配额（额外条数）
+    const today = new Date().toISOString().slice(0, 10);
+    const qkey = 'quota:' + sess.username + ':' + today;
+    const qd = await env.API_KEYS.get(qkey);
+    const q = qd ? JSON.parse(qd) : { used: 0, date: today };
+    q.used = Math.max(0, q.used - gift.value);
+    await env.API_KEYS.put(qkey, JSON.stringify(q), { expirationTtl: 86400 * 2 });
+  } else if (gift.type === 'extend_trial') {
+    // 延长试用期
+    user.trial_start = (user.trial_start || Date.now()) + gift.value * 86400000;
+    await putUser(env, sess.username, user);
+  } else if (gift.type === 'permanent') {
+    // 永久无限制
+    user.totp_enabled = true;
+    user.permanent = true;
+    await putUser(env, sess.username, user);
+  }
+
+  return json({ ok: true, msg: '兑换成功', type: gift.type, value: gift.value });
+}
+
 // 模型列表
 async function handleModels(request, env) {
   const sid = getCookie(request, 'session_id');
@@ -382,7 +535,7 @@ async function handleModels(request, env) {
   const user = await getUser(env, sess.username);
   if (user) {
     const trialStart = user.trial_start || user.firstLoginAt || Date.now();
-    if (Date.now() > trialStart + TRIAL_DAYS * 86400000 && !user.totp_enabled) {
+    if (Date.now() > trialStart + TRIAL_DAYS * 86400000 && !user.totp_enabled && !user.permanent) {
       return json({ ok: false, msg: '试用期已结束，请绑定2FA' }, 403);
     }
   }
@@ -398,10 +551,20 @@ async function handleChat(request, env) {
   if (!sess) return json({ ok: false, msg: '会话过期' }, 401);
 
   const user = await getUser(env, sess.username);
-  if (user) {
-    const trialStart = user.trial_start || user.firstLoginAt || Date.now();
-    if (Date.now() > trialStart + TRIAL_DAYS * 86400000 && !user.totp_enabled) {
-      return json({ ok: false, msg: '试用期已结束，请绑定2FA' }, 403);
+  if (!user) return json({ ok: false, msg: '用户不存在' }, 404);
+
+  // 试用期检查
+  const trialStart = user.trial_start || user.firstLoginAt || Date.now();
+  const trialExpired = Date.now() > trialStart + TRIAL_DAYS * 86400000;
+  if (trialExpired && !user.totp_enabled && !user.permanent) {
+    return json({ ok: false, msg: '试用期已结束，请绑定2FA解锁' }, 403);
+  }
+
+  // 配额检查（未绑2FA时）
+  if (!user.totp_enabled && !user.permanent) {
+    const quota = await getQuota(env, sess.username);
+    if (quota.used >= DAILY_LIMIT_NO_2FA) {
+      return json({ ok: false, msg: `今日聊天次数已用完(${DAILY_LIMIT_NO_2FA}条)，绑定2FA解锁无限制` }, 429);
     }
   }
 
@@ -424,6 +587,11 @@ async function handleChat(request, env) {
     return json({ ok: false, msg: '上游错误: ' + errBody }, upstreamRes.status);
   }
 
+  // 成功才计次
+  if (!user.totp_enabled && !user.permanent) {
+    await incQuota(env, sess.username);
+  }
+
   const data = await upstreamRes.json();
   return json({ ok: true, data });
 }
@@ -431,7 +599,7 @@ async function handleChat(request, env) {
 // 登出
 async function handleLogout(request, env) {
   const sid = getCookie(request, 'session_id');
-  if (sid) await env.HE_SITE_KV.delete('sess:' + sid);
+  if (sid) await env.USERS.delete('sess:' + sid);
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: {
@@ -446,23 +614,40 @@ export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const path = url.pathname;
+  const method = request.method;
 
-  if (request.method === 'OPTIONS') {
+  if (method === 'OPTIONS') {
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } });
   }
 
-  if (path === '/auth/github' && request.method === 'GET') return handleGitHubAuth(request, env);
-  if (path === '/auth/callback' && request.method === 'GET') return handleGitHubCallback(request, env);
-  if (path === '/api/register' && request.method === 'POST') return handleRegister(request, env);
-  if (path === '/api/login' && request.method === 'POST') return handlePasswordLogin(request, env);
-  if (path === '/api/totp-verify' && request.method === 'POST') return handleTotpVerify(request, env);
-  if (path === '/api/totp-setup' && request.method === 'POST') return handleTotpSetup(request, env);
-  if (path === '/api/totp-enable' && request.method === 'POST') return handleTotpEnable(request, env);
-  if (path === '/api/skip-2fa' && request.method === 'POST') return handleSkip2FA(request, env);
-  if (path === '/api/check-status' && request.method === 'GET') return handleCheckStatus(request, env);
-  if (path === '/api/logout' && request.method === 'POST') return handleLogout(request, env);
-  if (path === '/v1/models' && request.method === 'GET') return handleModels(request, env);
-  if (path === '/v1/chat/completions' && request.method === 'POST') return handleChat(request, env);
+  // 路由表
+  const routes = {
+    'POST /api/register': handleRegister,
+    'POST /api/login': handlePasswordLogin,
+    'GET /auth/github': handleGitHubAuth,
+    'GET /auth/callback': handleGitHubCallback,
+    'POST /api/totp/verify': handleTotpVerify,
+    'POST /api/totp/setup': handleTotpSetup,
+    'POST /api/totp/enable': handleTotpEnable,
+    'POST /api/totp/skip': handleSkip2FA,
+    'GET /api/status': handleCheckStatus,
+    'GET /api/keys': handleApiKeys,
+    'POST /api/keys/create': handleCreateKey,
+    'POST /api/keys/delete': handleDeleteKey,
+    'POST /api/gift/redeem': handleRedeemGift,
+    'GET /api/models': handleModels,
+    'POST /api/chat': handleChat,
+    'POST /api/logout': handleLogout,
+  };
 
-  return fetch(request);
+  const key = method + ' ' + path;
+  const handler = routes[key];
+  if (handler) return handler(request, env);
+
+  // 前端页面
+  if (path === '/' || path === '/index.html') {
+    return env.ASSETS.fetch(request);
+  }
+
+  return json({ ok: false, msg: 'Not Found' }, 404);
 }
