@@ -1,47 +1,298 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI API Key 分发平台</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI API Key 平台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .container {
+    width: 100%;
+    max-width: 420px;
+    padding: 32px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+  }
+  h1 { font-size: 22px; text-align: center; margin-bottom: 24px; }
+  h2 { font-size: 18px; margin-bottom: 16px; }
+  input[type="text"], input[type="password"], textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.06);
+    color: #e6edf3;
+    font-size: 15px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus, textarea:focus { border-color: #58a6ff; }
+  button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: #238636;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: #2ea043; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: #161b22;
+    color: #e6edf3;
+    font-size: 14px;
+  }
+  pre {
+    background: #161b22;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 60px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* 分割线 */
+  .divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+    color: rgba(255,255,255,0.3);
+    font-size: 13px;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+  .divider::before { margin-right: 14px; }
+  .divider::after { margin-left: 14px; }
+
+  /* GitHub 登录按钮 */
+  .gh-login {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #e6edf3;
+    font: 15px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-decoration: none;
+    backdrop-filter: blur(8px);
+    transition: all .18s ease;
+    cursor: pointer;
+  }
+  .gh-login:hover {
+    border-color: #58a6ff;
+    box-shadow: 0 0 18px rgba(88,166,255,.35);
+    transform: translateY(-1px);
+  }
+  .gh-icon {
+    flex: 0 0 auto;
+    transition: transform .18s ease;
+  }
+  .gh-login:hover .gh-icon {
+    transform: scale(1.12);
+  }
+
+  /* 模型区域 */
+  .model-section { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .model-section button { width: auto; flex-shrink: 0; }
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #58a6ff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>AI API Key 平台</h1>
 
-    <!-- 登录 -->
-    <div id="loginSection">
-      <h2>登录</h2>
-      <input type="text" id="username" placeholder="用户名"><br><br>
-      <input type="password" id="password" placeholder="密码"><br><br>
-      <button onclick="login()">登录</button>
-    </div>
+<div class="container">
+  <h1>AI API Key 平台</h1>
 
-    <!-- 主界面 -->
-    <div id="mainSection" style="display:none;">
-      <h2>使用</h2>
-      <input type="text" id="apiKey" placeholder="输入你的 API Key"><br><br>
+  <!-- 登录区 -->
+  <div id="loginSection">
+    <h2>登录</h2>
 
-      <div class="model-section">
-        <button id="loadModelsBtn" onclick="loadModels()">加载模型</button>
-        <span id="modelLoading" style="display:none; margin-left: 8px;">
-          <span class="spinner"></span> 请求中...
-        </span>
-        <select id="modelSelect" style="display:none; margin-left: 8px;">
-          <option value="">-- 请选择模型 --</option>
-        </select>
-      </div>
+    <input type="text" id="username" placeholder="用户名"><br><br>
+    <input type="password" id="password" placeholder="密码"><br><br>
 
-      <br><br>
-      <textarea id="messageInput" placeholder="输入你的问题..." rows="4" cols="50"></textarea><br><br>
-      <button onclick="sendMessage()">发送</button>
+    <button onclick="login()">登录</button>
 
-      <h3>回复：</h3>
-      <pre id="output"></pre>
-    </div>
+    <!-- 分割线 -->
+    <div class="divider">或</div>
+
+    <!-- GitHub 登录按钮 -->
+    <a href="javascript:void(0)" onclick="alert('GitHub 登录暂未开放')" class="gh-login">
+      <svg class="gh-icon" viewBox="0 0 16 16" width="22" height="22" fill="currentColor">
+        <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+      </svg>
+      <span>使用 GitHub 登录</span>
+    </a>
   </div>
 
-  <script src="app.js"></script>
+  <!-- 主界面 -->
+  <div id="mainSection" style="display:none;">
+    <h2>使用</h2>
+    <input type="text" id="apiKey" placeholder="输入你的 API Key"><br><br>
+
+    <div class="model-section">
+      <button id="loadModelsBtn" onclick="loadModels()">加载模型</button>
+      <span id="modelLoading" style="display:none;">
+        <span class="spinner"></span> 请求中...
+      </span>
+      <select id="modelSelect" style="display:none;">
+        <option value="">-- 请选择模型 --</option>
+      </select>
+    </div>
+
+    <br><br>
+    <textarea id="messageInput" placeholder="输入你的问题..." rows="4"></textarea><br><br>
+    <button onclick="sendMessage()">发送</button>
+
+    <h3 style="margin-top:20px;">回复：</h3>
+    <pre id="output"></pre>
+  </div>
+</div>
+
+<script>
+const WORKER = '';
+
+async function login() {
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+
+  const res = await fetch(WORKER + '/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const data = await res.json();
+  if (res.ok && data.token) {
+    localStorage.setItem('auth_token', data.token);
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('mainSection').style.display = 'block';
+  } else {
+    alert(data.error || '登录失败');
+  }
+}
+
+function getApiKey() {
+  return document.getElementById('apiKey').value.trim();
+}
+
+async function loadModels() {
+  const btn = document.getElementById('loadModelsBtn');
+  const select = document.getElementById('modelSelect');
+  const loading = document.getElementById('modelLoading');
+
+  btn.disabled = true;
+  btn.textContent = '请求中...';
+  loading.style.display = 'inline-block';
+  select.style.display = 'none';
+  select.innerHTML = '<option value="">-- 请选择模型 --</option>';
+
+  try {
+    const res = await fetch(WORKER + '/v1/models', {
+      headers: { 'Authorization': 'Bearer ' + getApiKey() }
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || '加载模型失败');
+      return;
+    }
+
+    data.data.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.name;
+      select.appendChild(opt);
+    });
+
+    select.style.display = 'inline-block';
+  } catch (e) {
+    alert('网络错误，请重试');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '加载模型';
+    loading.style.display = 'none';
+  }
+}
+
+async function sendMessage() {
+  const model = document.getElementById('modelSelect').value;
+  const message = document.getElementById('messageInput').value;
+  const output = document.getElementById('output');
+
+  if (!model) { alert('请先加载并选择模型'); return; }
+  if (!message.trim()) { alert('请输入内容'); return; }
+
+  output.textContent = '思考中...';
+
+  try {
+    const res = await fetch(WORKER + '/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + getApiKey()
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: message }],
+        stream: false
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      output.textContent = data.error || '请求失败';
+      return;
+    }
+
+    const reply = data.choices?.[0]?.message?.content || '（无回复）';
+    output.textContent = reply;
+
+    if (data._warning) {
+      alert(data._warning);
+    }
+  } catch (e) {
+    output.textContent = '网络错误：' + e.message;
+  }
+}
+</script>
+
 </body>
 </html>
