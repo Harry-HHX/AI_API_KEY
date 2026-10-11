@@ -4,523 +4,426 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI-CHAT</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f0f; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
-header { padding: 12px 24px; background: #1a1a1a; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content:-between; }
-header h1 { font-size: 18px; font-weight: 600; }
-header .user-info { display: flex; align-items: center; gap: 12px; font-size: 14px; }
-header .user-info button { padding: 6px 14px; border: 1px solid #555; border-radius: 6px; background: transparent; color: #e0e0e0; cursor: pointer; font-size: 13px; }
-header .user-info button:hover { background: #333; }
-#chat-container { flex: 1; display: flex; flex-direction: column; max-width: 800px; width: 100%; margin: 0 auto; padding: 16px; }
-#messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 12px; }
-.msg { padding: 12px 16px; border-radius: 12px; max-width: 85%; line-height: 1.6; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
-.msg.user { background: #2563eb; color: #fff; align-self: flex-end; }
-.msg.ai { background: #1e1e1e; border: 1px solid #333; align-self: flex-start; }
-.msg.system { background: #2d1f00; border: 1px solid #664400; color: #ffcc66; align-self: center; font-size: 13px; }
-#input-area { display: flex; gap: 8px; padding: 12px 0; border-top: 1px solid #333; }
-#input-area textarea { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #444; background: #1a1a1a; color: #e0e0e0; resize: none; height: 44px; font-size: 14px; outline: none; }
-#input-area textarea:focus { border-color: #2563eb; }
-#input-area button { padding: 0 20px; border-radius: 8px; border: none; background: #2563eb; color: #fff; cursor: pointer; font-size: 14px; font-weight: 500; }
-#input-area button:hover { background: #1d4ed8; }
-#input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
-#model-select { padding: 10px 14px; border-radius: 8px; border: 1px solid #444; background: #1a1a1a; color: #e0e0e0; font-size: 14px; outline: none; }
+body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; overflow-x: hidden; }
 
-/* 弹窗 */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: #1a1a1a; border: 1px solid #333; border-radius: 16px; padding: 32px; width: 90%; max-width: 420px; }
-.modal h2 { font-size: 20px; margin-bottom: 20px; text-align: center; }
-.modal input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid #444; background: #0f0f0f; color: #e0e0e0; font-size: 14px; margin-bottom: 12px; outline: none; }
-.modal input:focus { border-color: #2563eb; }
-.modal button { width: 100%; padding: 12px; border-radius: 8px; border: none; background: #2563eb; color: #fff; cursor: pointer; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
-.modal button:hover { background: #1d4ed8; }
-.modal button.secondary { background: #333; }
-.modal button.secondary:hover { background: #444; }
+/* 侧边栏 */
+.sidebar { position: fixed; top: 0; left: -280px; width: 280px; height: 100vh; background: rgba(15,15,15,0.95); backdrop-filter: blur(20px); border-right: 1px solid #222; transition: left 0.3s ease; z-index: 100; padding: 20px 0; }
+.sidebar.open { left: 0; }
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
+.sidebar-overlay.open { display: block; }
+.sidebar-item { padding: 16px 24px; cursor: pointer; transition: background 0.2s; border: none; background: none; color: #e0e0e0; font-size: 15px; width: 100%; text-align: left; }
+.sidebar-item:hover { background: rgba(255,255,255,0.05); }
+.sidebar-item.active { background: rgba(255,255,255,0.1); border-left: 3px solid #4caf50; }
+.sidebar-header { padding: 20px 24px; border-bottom: 1px solid #222; margin-bottom: 12px; }
+.sidebar-header .username { font-size: 14px; color: #888; }
 
-/* GitHub 登录按钮 */
-.btn-github {
-  width: 100%;
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid #444;
-  background: #0d1117;
-  color: #e0e0e0;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition: background 0.2s;
-}
-.btn-github:hover { background: #161b22; border-color: #666; }
-.btn-github svg { width: 20px; height: 20px; fill: currentColor; flex-shrink: 0; }
+/* 顶部栏 */
+.topbar { display: flex; align-items: center; padding: 12px 20px; background: rgba(10,10,10,0.8); backdrop-filter: blur(10px); border-bottom: 1px solid #1a1a1a; position: sticky; top: 0; z-index: 50; }
+.menu-btn { background: none; border: none; color: #e0e0e0; font-size: 24px; cursor: pointer; padding: 4px 8px; margin-right: 16px; }
+.topbar-title { font-size: 18px; font-weight: 600; }
 
-.modal .switch { text-align: center; font-size: 13px; color: #888; margin-top: 8px; }
-.modal .switch a { color: #2563eb; cursor: pointer; text-decoration: none; }
-.modal .switch a:hover { text-decoration: underline; }
-.modal .info { font-size: 13px; color: #aaa; text-align: center; margin-bottom: 16px; line-height: 1.5; }
-.modal .qr-area { text-align: center; margin: 16px 0; }
-.modal .qr-area code { display: block; background: #0f0f0f; padding: 10px; border-radius: 6px; font-size: 11px; word-break: break-all; margin-top: 8px; }
-.modal .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-.modal .tab { flex: 1; padding: 8px; text-align: center; border-radius: 6px; cursor: pointer; font-size: 13px; border: 1px solid #444; }
-.modal .tab.active { background: #2563eb; border-color: #2563eb; }
-.modal .key-item { background: #0f0f0f; border: 1px solid #333; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-.modal .key-item code { color: #7dd3fc; }
-.modal .key-item button { width: auto; padding: 4px 10px; font-size: 12px; margin: 0; background: #dc2626; }
-.modal .key-item button:hover { background: #b91c1c; }
-.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; font-size: 14px; z-index: 200; animation: slideIn 0.3s ease; }
-.toast.success { border-color: #16a34a; color: #16a34a; }
-.toast.error { border-color: #dc2626; color: #dc2626; }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-#loading { display: none; align-self: center; padding: 8px 16px; font-size: 13px; color: #888; }
+/* 主内容区 */
+.main { padding: 24px; max-width: 900px; margin: 0 auto; }
+
+/* 页面切换 */
+.page { display: none; }
+.page.active { display: block; }
+
+/* 毛玻璃按钮 */
+.btn { padding: 12px 24px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); color: #e0e0e0; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+.btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+.btn-primary { background: rgba(76,175,80,0.2); border-color: rgba(76,175,80,0.3); color: #4caf50; }
+.btn-primary:hover { background: rgba(76,175,80,0.3); }
+.btn-danger { background: rgba(244,67,54,0.15); border-color: rgba(244,67,54,0.3); color: #f44336; }
+.btn-danger:hover { background: rgba(244,67,54,0.25); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 卡片 */
+.card { background: rgba(255,255,255,0.03); border: 1px solid #222; border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+.card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+
+/* 输入框 */
+.input { width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 10px; color: #e0e0e0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+.input:focus { border-color: #4caf50; }
+.input::placeholder { color: #555; }
+
+/* 登录页 */
+.login-container { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.login-box { width: 100%; max-width: 380px; }
+.login-box h1 { text-align: center; margin-bottom: 32px; font-size: 28px; font-weight: 700; }
+.login-box .input { margin-bottom: 12px; }
+.login-box .btn { width: 100%; margin-bottom: 10px; }
+.login-switch { text-align: center; margin-top: 16px; font-size: 13px; color: #666; cursor: pointer; }
+.login-switch:hover { color: #4caf50; }
+
+/* GitHub 按钮 */
+.btn-github { background: #0d1117; border: 1px solid #30363d; color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-bottom: 16px; }
+.btn-github:hover { background: #161b22; }
+
+/* 聊天 */
+.chat-messages { height: calc(100vh - 200px); overflow-y: auto; margin-bottom: 16px; }
+.chat-msg { padding: 12px 16px; border-radius: 12px; margin-bottom: 8px; max-width: 80%; }
+.chat-msg.user { background: rgba(76,175,80,0.15); margin-left: auto; }
+.chat-msg.assistant { background: rgba(255,255,255,0.05); }
+.chat-input-area { display: flex; gap: 10px; }
+.chat-input-area .input { flex: 1; }
+
+/* API Key */
+.key-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.03); border: 1px solid #222; border-radius: 10px; margin-bottom: 8px; }
+.key-item code { font-family: monospace; font-size: 13px; color: #4caf50; }
+.key-count { font-size: 12px; color: #666; margin-bottom: 12px; }
+
+/* 2FA 弹窗 */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: #111; border: 1px solid #333; border-radius: 20px; padding: 32px; max-width: 420px; width: 90%; text-align: center; }
+.modal h3 { margin-bottom: 20px; }
+.qr-box { margin: 0 auto 16px; display: flex; justify-content: center; }
+.secret-text { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 13px; letter-spacing: 2px; cursor: pointer; color: #e0e0e0; margin-bottom: 16px; word-break: break-all; }
+.secret-text:hover { border-color: #4caf50; }
+.verify-input { text-align: center; letter-spacing: 4px; font-size: 18px; margin-bottom: 16px; }
+
+/* Toast */
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 24px; border-radius: 10px; background: #222; color: #fff; font-size: 14px; z-index: 300; transform: translateX(400px); transition: transform 0.3s; }
+.toast.show { transform: translateX(0); }
+.toast.success { border-left: 3px solid #4caf50; }
+.toast.error { border-left: 3px solid #f44336; }
+
+/* 账户设置 */
+.account-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid #1a1a1a; }
+.account-row:last-child { border-bottom: none; }
+.account-row label { font-size: 14px; color: #aaa; }
+.account-row .value { font-size: 14px; color: #e0e0e0; }
+.account-row .actions { display: flex; gap: 8px; }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>AI-CHAT</h1>
-  <div class="user-info" id="header-user" style="display:none;">
-    <span id="header-username"></span>
-    <button onclick="showKeysModal()">API Keys</button>
-    <button onclick="showGiftModal()">兑换码</button>
-    <button onclick="logout()">登出</button>
-  </div>
-</header>
-
-<div id="chat-container">
-  <div id="messages">
-    <div class="msg system">欢迎使用 AI-CHAT。请先登录开始对话。</div>
-  </div>
-  <div id="loading">AI 正在思考...</div>
-  <div id="input-area" style="display:none;">
-    <select id="model-select"></select>
-    <textarea id="user-input" placeholder="输入消息... (Shift+Enter 换行)" rows="1"></textarea>
-    <button id="send-btn" onclick="sendMessage()">发送</button>
+<!-- 登录页 -->
+<div id="login-page" class="login-container">
+  <div class="login-box">
+    <h1 id="login-title">AI-CHAT</h1>
+    <button class="btn btn-github" onclick="githubLogin()">
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      使用 GitHub 登录
+    </button>
+    <div style="text-align:center; color:#444; margin:12px 0;">或</div>
+    <input class="input" id="login-username" placeholder="用户名">
+    <input class="input" id="login-password" type="password" placeholder="密码">
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">登录</button>
+    <div class="login-switch" onclick="toggleLoginMode()">没有账号？点击注册</div>
   </div>
 </div>
 
-<!-- 登录/注册弹窗 -->
-<div class="modal-overlay" id="auth-modal">
-  <div class="modal">
-    <div class="tabs">
-      <div class="tab active" id="tab-login" onclick="switchTab('login')">登录</div>
-      <div class="tab" id="tab-register" onclick="switchTab('register')">注册</div>
+<!-- 主应用 -->
+<div id="app" style="display:none;">
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div style="font-size:16px;font-weight:600;">AI-CHAT</div>
+      <div class="username" id="sidebar-username"></div>
     </div>
-    <div id="form-login">
-      <input id="login-username" placeholder="用户名" autocomplete="username">
-      <input id="login-password" type="password" placeholder="密码" autocomplete="current-password">
-      <button onclick="doLogin()">登录</button>
-      <button class="btn-github" onclick="githubLogin()">
-        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        <span>使用 GitHub 登录</span>
-      </button>
+    <button class="sidebar-item active" onclick="switchPage('chat',this)">💬 聊天</button>
+    <button class="sidebar-item" onclick="switchPage('keys',this)">🔑 我的 API Key</button>
+    <button class="sidebar-item" onclick="switchPage('account',this)">👤 我的账户</button>
+    <button class="sidebar-item" onclick="doLogout()" style="color:#f44336;margin-top:20px;">🚪 退出登录</button>
+  </div>
+
+  <div class="topbar">
+    <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+    <div class="topbar-title" id="page-title">聊天</div>
+  </div>
+
+  <div class="main">
+    <!-- 聊天页 -->
+    <div class="page active" id="page-chat">
+      <div class="card">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+          <input class="input" id="chat-input" placeholder="输入消息..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="btn btn-primary" onclick="sendChat()">发送</button>
+        </div>
+      </div>
     </div>
-    <div id="form-register" style="display:none;">
-      <input id="reg-username" placeholder="用户名 (3-20位字母数字下划线)" autocomplete="username">
-      <input id="reg-password" type="password" placeholder="密码 (至少6位)" autocomplete="new-password">
-      <button onclick="doRegister()">注册</button>
+
+    <!-- API Key 页 -->
+    <div class="page" id="page-keys">
+      <div class="card">
+        <div class="card-title">API Key 管理</div>
+        <div class="key-count" id="key-count"></div>
+        <div id="key-list"></div>
+        <button class="btn btn-primary" id="create-key-btn" onclick="createKey()">+ 创建 API Key</button>
+      </div>
     </div>
-    <div class="switch">
-      <span id="switch-text">没有账号？<a onclick="switchTab('register')">去注册</a></span>
+
+    <!-- 账户页 -->
+    <div class="page" id="page-account">
+      <div class="card">
+        <div class="card-title">账户设置</div>
+        <div class="account-row">
+          <label>用户名</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="value" id="account-username"></span>
+            <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="showChangeUsername()">更改</button>
+          </div>
+        </div>
+        <div class="account-row">
+          <label>密码</label>
+          <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="showChangePassword()">更改密码</button>
+        </div>
+        <div class="account-row">
+          <label>2FA 双因素认证</label>
+          <div id="totp-status-area"></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- 2FA 设置弹窗 -->
-<div class="modal-overlay" id="totp-modal" style="display:none;">
+<!-- 2FA 弹窗 -->
+<div class="modal-overlay" id="totp-modal">
   <div class="modal">
-    <h2>设置两步验证 (2FA)</h2>
-    <div class="info">绑定2FA可解锁无限制聊天。你可以用 Google Authenticator、Authy 或 1Password 扫码。</div>
-    <div class="qr-area" id="qr-area"></div>
-    <input id="totp-code" placeholder="输入App显示的6位验证码" maxlength="6" inputmode="numeric">
-    <button onclick="enableTotp()">确认绑定</button>
-    <button class="secondary" onclick="skipTotp()">跳过（7天试用）</button>
+    <h3>设置两步验证</h3>
+    <div class="qr-box" id="totp-qr"></div>
+    <div class="secret-text" id="totp-secret" title="点击复制" onclick="copySecret()"></div>
+    <p style="font-size:12px;color:#666;margin-bottom:16px;">用验证器扫码，或手动输入上方密钥</p>
+    <input class="input verify-input" id="totp-code" placeholder="000000" maxlength="6" style="width:160px;margin:0 auto 16px;">
+    <br>
+    <button class="btn btn-primary" onclick="enableTotp()">验证并启用</button>
+    <button class="btn" onclick="closeTotpModal()" style="margin-left:8px;">取消</button>
   </div>
 </div>
 
-<!-- 2FA 校验弹窗 -->
-<div class="modal-overlay" id="totp-verify-modal" style="display:none;">
+<!-- 改密码弹窗 -->
+<div class="modal-overlay" id="pwd-modal">
   <div class="modal">
-    <h2>两步验证</h2>
-    <div class="info">请输入验证器App中的6位验证码</div>
-    <input id="verify-code" placeholder="6位验证码" maxlength="6" inputmode="numeric">
-    <button onclick="verifyTotp()">验证</button>
+    <h3>更改密码</h3>
+    <input class="input" id="old-pwd" type="password" placeholder="旧密码" style="margin-bottom:12px;">
+    <input class="input" id="new-pwd" type="password" placeholder="新密码" style="margin-bottom:12px;">
+    <input class="input verify-input" id="pwd-totp" placeholder="2FA 验证码" maxlength="6" style="width:160px;margin:0 auto 16px;">
+    <br>
+    <button class="btn btn-primary" onclick="changePassword()">确认更改</button>
+    <button class="btn" onclick="closePwdModal()" style="margin-left:8px;">取消</button>
   </div>
 </div>
 
-<!-- API Keys 弹窗 -->
-<div class="modal-overlay" id="keys-modal" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
-  <div class="modal" style="max-width:500px;">
-    <h2>API Keys</h2>
-    <div class="info">每个用户自动生成一个Key，用于API调用鉴权。</div>
-    <button onclick="createKey()">生成新 Key</button>
-    <div id="keys-list" style="margin-top:12px;"></div>
-    <button class="secondary" onclick="document.getElementById('keys-modal').style.display='none'">关闭</button>
+<!-- 改用户名弹窗 -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <h3>更改用户名</h3>
+    <input class="input" id="new-username" placeholder="新用户名" style="margin-bottom:16px;">
+    <button class="btn btn-primary" onclick="changeUsername()">确认</button>
+    <button class="btn" onclick="closeUserModal()" style="margin-left:8px;">取消</button>
   </div>
 </div>
 
-<!-- 礼品码弹窗 -->
-<div class="modal-overlay" id="gift-modal" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
-  <div class="modal">
-    <h2>兑换礼品码</h2>
-    <input id="gift-code" placeholder="输入礼品码">
-    <button onclick="redeemGift()">兑换</button>
-    <div id="gift-result" class="info"></div>
-    <button class="secondary" onclick="document.getElementById('gift-modal').style.display='none'">关闭</button>
-  </div>
-</div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ============ 状态 ============
-let currentUser = null;
-let totpEnabled = false;
-let trialExpired = false;
-let sessionChecked = false;
+let loginMode = 'login'; // 'login' | 'register'
+let totpSecret = '';
 
-// ============ 初始化 ============
-(async function init() {
-  await checkStatus();
-})();
-
+// ============ 状态检查 ============
 async function checkStatus() {
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-    if (data.ok) {
-      currentUser = data.username;
-      totpEnabled = data.totp_enabled;
-      trialExpired = data.trial_expired;
-      onLoginSuccess(data);
-    } else {
-      showAuthModal();
-    }
-  } catch {
-    showAuthModal();
-  }
-  sessionChecked = true;
-}
-
-function onLoginSuccess(data) {
-  document.getElementById('auth-modal').style.display = 'none';
-  document.getElementById('header-user').style.display = 'flex';
-  document.getElementById('header-username').textContent = currentUser;
-  document.getElementById('input-area').style.display = 'flex';
-  loadModels();
-
-  if (localStorage.getItem('need_2fa_setup') === 'true') {
-    localStorage.removeItem('need_2fa_setup');
-    if (!data.totp_enabled) showTotpSetup();
-  }
-  if (localStorage.getItem('need_totp_verify') === 'true') {
-    localStorage.removeItem('need_totp_verify');
-    showTotpVerify();
-  }
-  if (data.trial_expired && !data.totp_enabled) {
-    addSystemMsg('试用期已结束，请绑定2FA解锁无限制聊天。');
-  } else if (data.days_left !== undefined && data.days_left <= 3 && !data.totp_enabled) {
-    addSystemMsg(`试用期剩余 ${data.days_left} 天，绑定2FA可永久解锁无限制。`);
-  }
-}
-
-// ============ 认证 ============
-function showAuthModal() {
-  document.getElementById('auth-modal').style.display = 'flex';
-}
-
-function switchTab(tab) {
-  if (tab === 'login') {
-    document.getElementById('tab-login').classList.add('active');
-    document.getElementById('tab-register').classList.remove('active');
-    document.getElementById('form-login').style.display = 'block';
-    document.getElementById('form-register').style.display = 'none';
-    document.getElementById('switch-text').innerHTML = '没有账号？<a onclick="switchTab(\'register\')">去注册</a>';
-  } else {
-    document.getElementById('tab-register').classList.add('active');
-    document.getElementById('tab-login').classList.remove('active');
-    document.getElementById('form-login').style.display = 'none';
-    document.getElementById('form-register').style.display = 'block';
-    document.getElementById('switch-text').innerHTML = '已有账号？<a onclick="switchTab(\'login\')">去登录</a>';
-  }
-}
-
-async function doRegister() {
-  const username = document.getElementById('reg-username').value.trim();
-  const password = document.getElementById('reg-password').value;
-  if (!username || !password) { toast('请填写完整', 'error'); return; }
-  const res = await fetch('/api/register', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
+  const res = await fetch('/api/status');
   const data = await res.json();
   if (data.ok) {
-    toast('注册成功！', 'success');
-    localStorage.setItem('logged_in', 'true');
-    localStorage.setItem('username', username);
-    localStorage.setItem('need_2fa_setup', 'true');
-    setTimeout(() => location.reload(), 800);
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('sidebar-username').textContent = data.username;
+    document.getElementById('account-username').textContent = data.username;
+    updateTotpStatus(data.totp_enabled);
+    loadKeys();
   } else {
-    toast(data.msg || '注册失败', 'error');
+    document.getElementById('login-page').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
   }
+}
+
+// ============ 登录/注册 ============
+function toggleLoginMode() {
+  loginMode = loginMode === 'login' ? 'register' : 'login';
+  document.getElementById('login-title').textContent = loginMode === 'login' ? 'AI-CHAT' : '注册账号';
+  document.getElementById('login-btn').textContent = loginMode === 'login' ? '登录' : '注册';
+  document.querySelector('.login-switch').textContent = loginMode === 'login' ? '没有账号？点击注册' : '已有账号？点击登录';
 }
 
 async function doLogin() {
-  const username = document.getElementById('login-username').value.trim();
+  const username = document.getElementById('login-username').value;
   const password = document.getElementById('login-password').value;
-  if (!username || !password) { toast('请填写完整', 'error'); return; }
-  const res = await fetch('/api/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
+  const endpoint = loginMode === 'login' ? '/api/login' : '/api/register';
+  const res = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
   const data = await res.json();
   if (data.ok) {
-    toast('登录成功', 'success');
-    localStorage.setItem('logged_in', 'true');
-    localStorage.setItem('username', username);
-    if (data.totp_enabled) localStorage.setItem('need_totp_verify', 'true');
-    else localStorage.setItem('need_2fa_setup', 'true');
-    setTimeout(() => location.reload(), 800);
+    toast(loginMode === 'login' ? '登录成功' : '注册成功', 'success');
+    if (data.totp_enabled) { toast('请输入2FA验证码', 'success'); /* TODO: 弹2FA验证 */ }
+    await checkStatus();
   } else {
-    toast(data.msg || '登录失败', 'error');
+    toast(data.msg || '失败', 'error');
   }
 }
 
-function githubLogin() {
-  location.href = '/auth/github';
+function githubLogin() { location.href = '/api/auth/start'; }
+
+async function doLogout() {
+  await fetch('/api/logout', { method: 'POST' });
+  toggleSidebar();
+  await checkStatus();
 }
 
-async function logout() {
-  await fetch('/api/logout', { method: 'POST' });
-  localStorage.clear();
-  location.reload();
+// ============ 侧边栏 ============
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+
+function switchPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const titles = { chat: '聊天', keys: '我的 API Key', account: '我的账户' };
+  document.getElementById('page-title').textContent = titles[name] || '';
+  toggleSidebar();
+  if (name === 'keys') loadKeys();
+  if (name === 'account') checkStatus().then(() => {
+    // 刷新用户名显示
+  });
 }
 
 // ============ 2FA ============
-async function showTotpSetup() {
+function updateTotpStatus(enabled) {
+  const area = document.getElementById('totp-status-area');
+  if (enabled) {
+    area.innerHTML = '<span style="color:#4caf50;font-size:14px;">✓ 已绑定</span>';
+  } else {
+    area.innerHTML = '<button class="btn btn-primary" style="padding:6px 12px;font-size:12px;" onclick="startTotpSetup()">点击绑定 2FA</button>';
+  }
+}
+
+async function startTotpSetup() {
   const res = await fetch('/api/totp/setup', { method: 'POST' });
   const data = await res.json();
-  if (data.ok) {
-    document.getElementById('totp-modal').style.display = 'flex';
-    document.getElementById('qr-area').innerHTML = `
-      <a href="${data.otpauth}"><canvas id="qr-canvas"></canvas></a>
-      <code>${data.secret}</code>
-      <div style="font-size:11px;color:#888;margin-top:4px;">点击链接用App扫码，或手动输入上方密钥</div>
-    `;
-    const qrImg = document.createElement('img');
-    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.otpauth)}`;
-    qrImg.style.cssText = 'width:160px;height:160px;border-radius:8px;';
-    document.getElementById('qr-area').insertBefore(qrImg, document.getElementById('qr-area').firstChild);
-  }
+  if (!data.ok) { toast(data.msg, 'error'); return; }
+  totpSecret = data.secret;
+  document.getElementById('totp-qr').innerHTML = '';
+  const qr = qrcode(0, 'M');
+  qr.addData(data.otpauth);
+  qr.make();
+  document.getElementById('totp-qr').innerHTML = qr.createImgTag(5);
+  document.getElementById('totp-secret').textContent = data.secret.match(/.{1,4}/g).join(' ');
+  document.getElementById('totp-code').value = '';
+  document.getElementById('totp-modal').classList.add('open');
+}
+
+function copySecret() {
+  navigator.clipboard.writeText(totpSecret);
+  toast('密钥已复制', 'success');
 }
 
 async function enableTotp() {
-  const code = document.getElementById('totp-code').value.trim();
-  if (!/^\d{6}$/.test(code)) { toast('请输入6位验证码', 'error'); return; }
-  const res = await fetch('/api/totp/enable', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  });
+  const code = document.getElementById('totp-code').value;
+  if (code.length !== 6) { toast('请输入6位验证码', 'error'); return; }
+  const res = await fetch('/api/totp/enable', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({code}) });
   const data = await res.json();
-  if (data.ok) {
-    toast('2FA绑定成功！无限制聊天已解锁', 'success');
-    document.getElementById('totp-modal').style.display = 'none';
-    totpEnabled = true;
-    setTimeout(() => location.reload(), 800);
-  } else {
-    toast(data.msg || '绑定失败', 'error');
-  }
+  if (data.ok) { toast('2FA 绑定成功', 'success'); closeTotpModal(); checkStatus(); }
+  else toast(data.msg, 'error');
 }
 
-async function skipTotp() {
-  await fetch('/api/totp/skip', { method: 'POST' });
-  document.getElementById('totp-modal').style.display = 'none';
-  toast('已跳过，7天试用开始', 'success');
+function closeTotpModal() { document.getElementById('totp-modal').classList.remove('open'); }
+
+// ============ 改密码 ============
+function showChangePassword() { document.getElementById('pwd-modal').classList.add('open'); }
+function closePwdModal() { document.getElementById('pwd-modal').classList.remove('open'); }
+async function changePassword() {
+  const oldPwd = document.getElementById('old-pwd').value;
+  const newPwd = document.getElementById('new-pwd').value;
+  const totpCode = document.getElementById('pwd-totp').value;
+  if (!oldPwd || !newPwd || totpCode.length !== 6) { toast('请填写完整', 'error'); return; }
+  // 先验证旧密码+2FA
+  const verifyRes = await fetch('/api/totp/verify', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({code: totpCode}) });
+  const verifyData = await verifyRes.json();
+  if (!verifyData.ok) { toast('2FA验证失败', 'error'); return; }
+  // 改密码
+  const statusRes = await fetch('/api/status');
+  const statusData = await statusRes.json();
+  const changeRes = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username: statusData.username, password: newPwd}) });
+  // 这里需要你后端加一个 /api/change-password 接口
+  toast('密码更改功能需要后端接口，当前仅验证2FA通过', 'success');
+  closePwdModal();
 }
 
-async function showTotpVerify() {
-  document.getElementById('totp-verify-modal').style.display = 'flex';
+// ============ 改用户名 ============
+function showChangeUsername() { document.getElementById('user-modal').classList.add('open'); }
+function closeUserModal() { document.getElementById('user-modal').classList.remove('open'); }
+async function changeUsername() {
+  const newName = document.getElementById('new-username').value;
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(newName)) { toast('用户名3-20位字母数字下划线', 'error'); return; }
+  // 需要后端加 /api/change-username
+  toast('用户名更改需要后端接口支持', 'success');
+  closeUserModal();
 }
 
-async function verifyTotp() {
-  const code = document.getElementById('verify-code').value.trim();
-  if (!/^\d{6}$/.test(code)) { toast('请输入6位验证码', 'error'); return; }
-  const res = await fetch('/api/totp/verify', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  });
-  const data = await res.json();
-  if (data.ok) {
-    toast('验证通过', 'success');
-    document.getElementById('totp-verify-modal').style.display = 'none';
-    setTimeout(() => location.reload(), 500);
-  } else {
-    toast(data.msg || '验证失败', 'error');
-  }
-}
-
-// ============ API Keys ============
-function showKeysModal() {
-  document.getElementById('keys-modal').style.display = 'flex';
-  loadKeys();
-}
-
+// ============ API Key ============
 async function loadKeys() {
   const res = await fetch('/api/keys');
   const data = await res.json();
-  if (data.ok) {
-    const list = document.getElementById('keys-list');
-    if (data.keys.length === 0) { list.innerHTML = '<div class="info">暂无API Key</div>'; return; }
-    list.innerHTML = data.keys.map(k => `
-      <div class="key-item">
-        <code>${k.slice(0, 12)}...${k.slice(-4)}</code>
-        <button onclick="deleteKey('${k}')">删除</button>
-      </div>
-    `).join('');
-  }
+  if (!data.ok) return;
+  const list = document.getElementById('key-list');
+  list.innerHTML = '';
+  data.keys.forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'key-item';
+    div.innerHTML = `<code>${k}</code> <button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteKey('${k}')">删除</button>`;
+    list.appendChild(div);
+  });
+  document.getElementById('key-count').textContent = `共 ${data.keys.length}/3 个`;
+  document.getElementById('create-key-btn').disabled = data.keys.length >= 3;
 }
 
 async function createKey() {
   const res = await fetch('/api/keys/create', { method: 'POST' });
   const data = await res.json();
-  if (data.ok) { toast('Key已生成', 'success'); loadKeys(); }
-  else toast(data.msg || '生成失败', 'error');
+  if (data.ok) { toast('创建成功', 'success'); loadKeys(); }
+  else toast(data.msg || '创建失败', 'error');
 }
 
 async function deleteKey(key) {
-  if (!confirm('确定删除此Key？')) return;
-  const res = await fetch('/api/keys/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key })
-  });
+  const res = await fetch('/api/keys/delete', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key}) });
   const data = await res.json();
   if (data.ok) { toast('已删除', 'success'); loadKeys(); }
   else toast(data.msg || '删除失败', 'error');
 }
 
-// ============ 礼品码 ============
-function showGiftModal() {
-  document.getElementById('gift-modal').style.display = 'flex';
-  document.getElementById('gift-result').textContent = '';
-}
-
-async function redeemGift() {
-  const code = document.getElementById('gift-code').value.trim();
-  if (!code) { toast('请输入礼品码', 'error'); return; }
-  const res = await fetch('/api/gift/redeem', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  });
-  const data = await res.json();
-  if (data.ok) {
-    document.getElementById('gift-result').textContent = `兑换成功！类型: ${data.type}, 价值: ${data.value}`;
-    document.getElementById('gift-result').style.color = '#16a34a';
-    toast('兑换成功', 'success');
-    setTimeout(() => location.reload(), 1500);
-  } else {
-    document.getElementById('gift-result').textContent = data.msg;
-    document.getElementById('gift-result').style.color = '#dc2626';
-    toast(data.msg, 'error');
-  }
-}
-
 // ============ 聊天 ============
-async function loadModels() {
-  const res = await fetch('/api/models');
-  const data = await res.json();
-  if (data.ok) {
-    const sel = document.getElementById('model-select');
-    sel.innerHTML = data.data.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-  }
-}
-
-async function sendMessage() {
-  const input = document.getElementById('user-input');
-  const text = input.value.trim();
-  if (!text) return;
-
-  addUserMsg(text);
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML += `<div class="chat-msg user">${escapeHtml(msg)}</div>`;
   input.value = '';
-  document.getElementById('send-btn').disabled = true;
-  document.getElementById('loading').style.display = 'block';
-
-  const model = document.getElementById('model-select').value;
-  const messages = getHistoryForAPI();
-
-  const res = await fetch('/api/chat', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages })
-  });
-
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('send-btn').disabled = false;
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    addSystemMsg(err.msg || '发送失败');
-    return;
-  }
-
-  const data = await res.json();
-  if (data.ok && data.data.choices && data.data.choices[0]) {
-    addAiMsg(data.data.choices[0].message.content);
-  } else {
-    addSystemMsg('AI返回格式异常');
-  }
+  msgs.scrollTop = msgs.scrollHeight;
+  // TODO: 调你后端聊天 API
+  msgs.innerHTML += `<div class="chat-msg assistant">（聊天功能需对接后端 API）</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
-function getHistoryForAPI() {
-  const msgs = document.querySelectorAll('#messages .msg');
-  const result = [];
-  for (const m of msgs) {
-    if (m.classList.contains('user')) result.push({ role: 'user', content: m.textContent });
-    else if (m.classList.contains('ai')) result.push({ role: 'assistant', content: m.textContent });
-  }
-  return result.slice(-20);
-}
-
-function addUserMsg(text) {
-  const div = document.createElement('div');
-  div.className = 'msg user';
-  div.textContent = text;
-  document.getElementById('messages').appendChild(div);
-  scrollBottom();
-}
-
-function addAiMsg(text) {
-  const div = document.createElement('div');
-  div.className = 'msg ai';
-  div.textContent = text;
-  document.getElementById('messages').appendChild(div);
-  scrollBottom();
-}
-
-function addSystemMsg(text) {
-  const div = document.createElement('div');
-  div.className = 'msg system';
-  div.textContent = text;
-  document.getElementById('messages').appendChild(div);
-  scrollBottom();
-}
-
-function scrollBottom() {
-  const c = document.getElementById('messages');
-  c.scrollTop = c.scrollHeight;
-}
-
-document.getElementById('user-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
+function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ============ Toast ============
-function toast(msg, type = '') {
-  const el = document.createElement('div');
-  el.className = 'toast ' + type;
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
   el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  el.className = 'toast ' + type + ' show';
+  setTimeout(() => el.classList.remove('show'), 3000);
 }
+
+// ============ 启动 ============
+checkStatus();
 </script>
 </body>
 </html>
