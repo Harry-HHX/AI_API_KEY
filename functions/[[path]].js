@@ -10,10 +10,12 @@ function json(data, status = 200) {
   });
 }
 
-function getUsername(request) {
-  const cookie = request.headers.get('Cookie') || '';
-  const match = cookie.match(/user=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+async function getUsername(request, env) {
+  const url = new URL(request.url);
+  const t = url.searchParams.get('t');
+  if (!t) return null;
+  const session = await env.DB.prepare('SELECT username FROM sessions WHERE token = ?').bind(t).first();
+  return session ? session.username : null;
 }
 
 function sha256(str) {
