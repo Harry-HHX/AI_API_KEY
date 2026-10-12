@@ -87,12 +87,12 @@ export async function onRequest(context) {
       const code = await generateTOTP(user.totp_secret_encrypted, env);
       if (code !== body.totp_code) return json({ ok: false, msg: '2FA验证码错误' }, 401);
     }
-    return new Response(JSON.stringify({ ok: true, msg: '登录成功' }), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Set-Cookie': `user=${body.username}; Path=/; Max-Age=2592000; SameSite=Lax`
-      }
-    });
+    // 生成 token 并存 sessions 表
+    const token = 'sk_' + crypto.randomUUID().replace(/-/g, '');
+    await env.DB.prepare('INSERT INTO sessions (token, username, created_at) VALUES (?, ?, ?)')
+      .bind(token, body.username, Date.now()).run();
+    // 返回 token，不 set-cookie
+    return json({ ok: true, msg: '登录成功', token, username: body.username });
   }
 
   // ========== /api/logout ==========
