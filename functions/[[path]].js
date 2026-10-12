@@ -22,6 +22,25 @@ function sha256(str) {
   );
 }
 
+// ========== TOTP 生成 ==========
+async function generateTOTP(secret_b64, env) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.WORKER), { name: 'AES-GCM' }, false, ['decrypt']);
+  const encrypted = Uint8Array.from(atob(secret_b64), c => c.charCodeAt(0));
+  const iv = encrypted.slice(0, 12);
+  const data = encrypted.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+  const secret = new TextDecoder().decode(decrypted);
+
+  let epoch = Math.floor(Date.now() / 30000);
+  const h = new Uint8Array(8);
+  for (let i = 7; i >= 0; i--, epoch >>= 8) h[i] = epoch & 0xff;
+  const key2 = await crypto.subtle.importKey('raw', Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key2, h));
+  const offset = sig[19] & 0xf;
+  const code = ((sig[offset] & 0x7f) << 24 | (sig[offset + 1] & 0xff) << 16 | (sig[offset + 2] & 0xff) << 8 | (sig[offset + 3] & 0xff)) % 1000000;
+  return String(code).padStart(6, '0');
+}
+
 // ========== 路由入口 ==========
 export async function onRequest(context) {
   const { request, env } = context;
@@ -48,7 +67,7 @@ export async function onRequest(context) {
         .bind(body.username, hash, Date.now()).run();
       return json({ ok: true, msg: '注册成功' });
     } catch (e) {
-      return json({ ok: false, msg: '用户名已存在' }, 400);
+      return json({ ok: false, msg: '注册失败: ' + e.message }, 400);
     }
   }
 
@@ -63,22 +82,8 @@ export async function onRequest(context) {
     // 2FA 检查
     if (user.totp_verified) {
       if (!body.totp_code) return json({ ok: false, msg: '需要2FA验证码', need_totp: true }, 401);
-      // 内联 TOTP 验证
-      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.WORKER), { name: 'AES-GCM' }, false, ['decrypt']);
-      const encrypted = Uint8Array.from(atob(user.totp_secret_encrypted), c => c.charCodeAt(0));
-      const iv = encrypted.slice(0, 12);
-      const data = encrypted.slice(12);
-      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
-      const secret = new TextDecoder().decode(decrypted);
-      // 生成 TOTP
-      let epoch = Math.floor(Date.now() / 30000);
-      const h = new Uint8Array(8);
-      for (let i = 7; i >= 0; i--, epoch >>= 8) h[i] = epoch & 0xff;
-      const key2 = await crypto.subtle.importKey('raw', Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-      const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key2, h));
-      const offset = sig[19] & 0xf;
-      const code = ((sig[offset] & 0x7f) << 24 | (sig[offset + 1] & 0xff) << 16 | (sig[offset + 2] & 0xff) << 8 | (sig[offset + 3] & 0xff)) % 1000000;
-      if (String(code).padStart(6, '0') !== body.totp_code) return json({ ok: false, msg: '2FA验证码错误' }, 401);
+      const code = await generateTOTP(user.totp_secret_encrypted, env);
+      if (code !== body.totp_code) return json({ ok: false, msg: '2FA验证码错误' }, 401);
     }
     return new Response(JSON.stringify({ ok: true, msg: '登录成功' }), {
       headers: {
@@ -101,7 +106,8 @@ export async function onRequest(context) {
   // ========== /auth/start ==========
   if (pathname === '/auth/start' && method === 'GET') {
     const state = crypto.randomUUID();
-    await env.USERS.put('oauth_state:' + state, '1', { expirationTtl: 600 });
+    await env.DB.prepare('INSERT OR REPLACE INTO oauth_states (state, created_at) VALUES (?, ?)')
+      .bind(state, Date.now()).run();
     const redirect = `https://github.com/login/oauth/authorize?client_id=${env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(url.origin + '/auth/callback')}&scope=read:user&state=${state}`;
     return new Response('', { status: 302, headers: { 'Location': redirect } });
   }
@@ -111,9 +117,10 @@ export async function onRequest(context) {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     if (!code || !state) return new Response('缺少参数', { status: 400 });
-    const saved = await env.USERS.get('oauth_state:' + state);
+
+    const saved = await env.DB.prepare('SELECT * FROM oauth_states WHERE state = ?').bind(state).first();
     if (!saved) return new Response('state 无效或过期', { status: 400 });
-    await env.USERS.delete('oauth_state:' + state);
+    await env.DB.prepare('DELETE FROM oauth_states WHERE state = ?').bind(state).run();
 
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
@@ -215,19 +222,8 @@ export async function onRequest(context) {
     if (!username) return json({ ok: false, msg: '未登录' }, 401);
     const body = await getBody(request);
     const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first();
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.WORKER), { name: 'AES-GCM' }, false, ['decrypt']);
-    const encrypted = Uint8Array.from(atob(user.totp_secret_encrypted), c => c.charCodeAt(0));
-    const iv = encrypted.slice(0, 12); const data = encrypted.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
-    const secret = new TextDecoder().decode(decrypted);
-    let epoch = Math.floor(Date.now() / 30000);
-    const h = new Uint8Array(8);
-    for (let i = 7; i >= 0; i--, epoch >>= 8) h[i] = epoch & 0xff;
-    const key2 = await crypto.subtle.importKey('raw', Uint8Array.from(atob(secret), c => c.charCodeAt(0)), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key2, h));
-    const offset = sig[19] & 0xf;
-    const code = ((sig[offset] & 0x7f) << 24 | (sig[offset + 1] & 0xff) << 16 | (sig[offset + 2] & 0xff) << 8 | (sig[offset + 3] & 0xff)) % 1000000;
-    if (String(code).padStart(6, '0') === body.code) {
+    const code = await generateTOTP(user.totp_secret_encrypted, env);
+    if (code === body.code) {
       await env.DB.prepare('UPDATE users SET totp_verified = 1 WHERE username = ?').bind(username).run();
       return json({ ok: true });
     }
@@ -238,6 +234,8 @@ export async function onRequest(context) {
   if (pathname === '/api/models' && method === 'GET') {
     const username = getUsername(request);
     if (!username) return json({ ok: false, msg: '未登录' }, 401);
+    // 随机 1-10 秒防刷延迟
+    await new Promise(r => setTimeout(r, Math.floor(Math.random() * 10000) + 1000));
     const WORKERS_AI_MODELS = [
       { id: '@cf/deepseek-ai/deepseek-v4-flash-0731', name: 'DeepSeek V4 Flash' },
       { id: '@cf/qwen/qwen3-30b-a3b-fp8', name: 'Qwen3 30B A3B' },
@@ -266,12 +264,41 @@ export async function onRequest(context) {
     ];
 
     try {
-      const result = await env.AI.run(model, { messages, max_tokens: 1024, temperature: 0.7 });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+
+      const cfRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/ai/run/${model}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.CF_API_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ messages, max_tokens: 1024, temperature: 0.7 }),
+          signal: controller.signal
+        }
+      );
+      clearTimeout(timer);
+
+      if (!cfRes.ok) {
+        const errText = await cfRes.text();
+        return json({ ok: false, msg: 'AI 请求失败: ' + cfRes.status + ' ' + errText }, 500);
+      }
+
+      const cfData = await cfRes.json();
+      const reply = cfData.result?.response || '无响应';
+
+      // 额度扣减（按字符数粗略估算 token）
       const used = Math.ceil(JSON.stringify(messages).length / 4);
       await env.DB.prepare('UPDATE api_keys SET used_tokens = ?, last_used = ? WHERE key = ?')
         .bind((userKey.used_tokens || 0) + used, Date.now(), userKey.key).run();
-      return json({ ok: true, reply: result.response || '无响应' });
+
+      return json({ ok: true, reply });
     } catch (e) {
+      if (e.name === 'AbortError') {
+        return json({ ok: false, msg: 'AI 请求超时（30秒）' }, 504);
+      }
       return json({ ok: false, msg: 'AI 请求失败：' + String(e) }, 500);
     }
   }
