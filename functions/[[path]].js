@@ -4,6 +4,24 @@ export async function onRequest(context) {
   const path = url.pathname;
   const method = request.method;
 
+  // 密码工具函数
+  async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function verifyPassword(password, storedHash) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hash === storedHash;
+  }
+
   if (method === 'OPTIONS') {
     return new Response(null, {
       headers: {
@@ -22,8 +40,7 @@ export async function onRequest(context) {
     if (path === '/api/register' && method === 'POST') {
       const body = await request.json();
       const { username, password, tfa } = body;
-      const bcrypt = await import('bcryptjs');
-      const hash = await bcrypt.hash(password, 10);
+      const hash = await hashPassword(password);
       await env.DB.prepare('INSERT INTO users (username, password_hash, tfa_secret, created_at) VALUES (?, ?, ?, ?)')
         .bind(username, hash, tfa || null, Date.now()).run();
       return new Response(JSON.stringify({ ok: true }), { headers: corsHeaders });
@@ -33,9 +50,8 @@ export async function onRequest(context) {
     if (path === '/api/login' && method === 'POST') {
       const body = await request.json();
       const { username, password } = body;
-      const bcrypt = await import('bcryptjs');
       const user = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(username).first();
-      if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      if (!user || !(await verifyPassword(password, user.password_hash))) {
         return new Response(JSON.stringify({ ok: false, msg: '账号或密码错误' }), { headers: corsHeaders });
       }
       const token = 'sk_' + crypto.randomUUID().replace(/-/g, '');
