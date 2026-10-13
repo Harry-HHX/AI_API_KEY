@@ -6,304 +6,475 @@
 <title>AI-CHAT</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e5e7eb; min-height: 100vh; }
-.container { max-width: 900px; margin: 0 auto; padding: 20px; }
-h1 { text-align: center; margin-bottom: 20px; color: #fff; }
-h3 { color: #e5e7eb; margin-bottom: 12px; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e5e7eb; min-height: 100vh; overflow-x: hidden; }
+
+.topbar { position: fixed; top: 0; left: 0; right: 0; height: 56px; background: #1a1d27; border-bottom: 1px solid #2a2d3a; display: none; align-items: center; padding: 0 16px; z-index: 200; }
+.topbar .menu-btn { background: none; border: none; color: #e5e7eb; font-size: 24px; cursor: pointer; padding: 4px 8px; margin-right: 12px; }
+.topbar .menu-btn:hover { background: #2a2d3a; border-radius: 8px; }
+.topbar h1 { font-size: 18px; color: #fff; font-weight: 600; }
+
+.sidebar { position: fixed; top: 0; left: 0; width: 260px; height: 100vh; background: #1a1d27; border-right: 1px solid #2a2d3a; z-index: 300; transform: translateX(-100%); transition: transform 0.3s ease; padding-top: 76px; }
+.sidebar.open { transform: translateX(0); }
+.sidebar .nav-item { display: flex; align-items: center; gap: 12px; padding: 14px 20px; cursor: pointer; color: #9ca3af; transition: background 0.2s, color 0.2s; font-size: 15px; }
+.sidebar .nav-item:hover { background: #2a2d3a; color: #e5e7eb; }
+.sidebar .nav-item.active { background: #4f6ef7; color: #fff; }
+.sidebar .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+.sidebar-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 250; display: none; }
+.sidebar-overlay.open { display: block; }
+
+.main { margin-top: 56px; padding: 20px; max-width: 900px; margin-left: auto; margin-right: auto; }
+.page { display: none; }
+.page.active { display: block; }
+
 .card { background: #1a1d27; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #2a2d3a; }
-input, button, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2d3a; background: #0f1117; color: #e5e7eb; font-size: 16px; margin-bottom: 12px; }
-button { background: #4f6ef7; color: #fff; border: none; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+h3 { color: #e5e7eb; margin-bottom: 16px; font-size: 16px; }
+
+input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #2a2d3a; background: #0f1117; color: #e5e7eb; font-size: 16px; margin-bottom: 12px; box-sizing: border-box; }
+button { padding: 12px 24px; border-radius: 8px; border: none; background: #4f6ef7; color: #fff; cursor: pointer; font-weight: 600; font-size: 16px; transition: background 0.2s; box-sizing: border-box; }
 button:hover { background: #3b5de7; }
+button:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
 button.danger { background: #ef4444; }
 button.danger:hover { background: #dc2626; }
-.tabs { display: flex; gap: 8px; margin-bottom: 20px; }
-.tabs button { flex: 1; padding: 10px; border-radius: 8px; background: #1a1d27; color: #9ca3af; border: 1px solid #2a2d3a; }
-.tabs button.active { background: #4f6ef7; color: #fff; border-color: #4f6ef7; }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+button.github { background: #24292e; }
+button.github:hover { background: #1b1f23; }
+
+.row { display: flex; gap: 8px; align-items: center; }
+.row input, .row select { margin-bottom: 0; flex: 1; }
+.row button { flex-shrink: 0; }
+
+.model-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.model-row label { color: #9ca3af; font-size: 14px; white-space: nowrap; }
+.model-row select { flex: 1; margin-bottom: 0; width: auto; }
+
 .chat-box { background: #0f1117; border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; margin-bottom: 12px; border: 1px solid #2a2d3a; }
 .msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; max-width: 80%; word-wrap: break-word; }
 .msg.user { background: #4f6ef7; color: #fff; margin-left: auto; }
 .msg.ai { background: #1a1d27; border: 1px solid #2a2d3a; }
-.msg pre { background: #0f1117; padding: 10px; border-radius: 6px; overflow-x: auto; margin-top: 8px; }
+
 .key-item { display: flex; align-items: center; gap: 10px; padding: 12px; background: #0f1117; border-radius: 8px; margin-bottom: 8px; border: 1px solid #2a2d3a; }
 .key-item code { flex: 1; font-family: monospace; font-size: 14px; color: #a5b4fc; word-break: break-all; }
 .key-item span { font-size: 14px; color: #9ca3af; white-space: nowrap; }
-.error { color: #ef4444; font-size: 14px; margin-bottom: 10px; }
-.success { color: #22c55e; font-size: 14px; margin-bottom: 10px; }
-#main-page { display: none; }
-#login-page { display: block; max-width: 400px; margin: 80px auto; }
-.logout-btn { position: fixed; top: 20px; right: 20px; width: auto; padding: 8px 16px; font-size: 14px; z-index: 100; }
-a { color: #4f6ef7; text-decoration: none; }
-a:hover { text-decoration: underline; }
+.key-limit { color: #9ca3af; font-size: 13px; margin-bottom: 12px; }
+
+.account-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid #2a2d3a; }
+.account-row:last-child { border-bottom: none; }
+.account-row label { color: #9ca3af; font-size: 14px; }
+.account-row .value { color: #e5e7eb; font-size: 14px; }
+
+#login-page { max-width: 400px; margin: 100px auto; padding: 20px; }
+.error-msg { color: #ef4444; font-size: 14px; margin-bottom: 10px; display: none; }
+.success-msg { color: #22c55e; font-size: 14px; margin-bottom: 10px; display: none; }
+.switch-link { color: #4f6ef7; cursor: pointer; font-size: 14px; text-align: center; margin-top: 12px; display: block; }
+.switch-link:hover { text-decoration: underline; }
+
+.gift-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.gift-row input { margin-bottom: 0; flex: 1; }
 </style>
 </head>
 <body>
 
-<!-- 登录页 -->
-<div id="login-page" class="container">
-  <div class="card">
-    <h1 id="form-title">AI-CHAT 登录</h1>
-    <div id="msg"></div>
-    <div id="login-form">
-      <input id="username" placeholder="用户名">
-      <input id="password" type="password" placeholder="密码">
-      <input id="totp-code" type="password" placeholder="2FA验证码（如已开启）" style="display:none">
-      <button onclick="doLogin()">登录</button>
-      <button onclick="toggleForm()">没有账号？注册</button>
-    </div>
-    <div id="register-form" style="display:none">
-      <input id="reg-username" placeholder="用户名">
-      <input id="reg-password" type="password" placeholder="密码">
-      <button onclick="doRegister()">注册</button>
-      <button onclick="toggleForm()">已有账号？去登录</button>
-    </div>
-    <div style="text-align:center; margin-top:16px; padding-top:16px; border-top:1px solid #2a2d3a;">
-      <a href="/auth/start">使用 GitHub 登录</a>
-    </div>
+<div class="topbar" id="topbar">
+  <button class="menu-btn" onclick="toggleSidebar()">&#9776;</button>
+  <h1>AI-CHAT</h1>
+</div>
+
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div class="sidebar" id="sidebar">
+  <div class="nav-item active" onclick="navigate('chat', this)">
+    <span class="icon">&#128172;</span> 聊天
+  </div>
+  <div class="nav-item" onclick="navigate('keys', this)">
+    <span class="icon">&#128273;</span> 我的 API Key
+  </div>
+  <div class="nav-item" onclick="navigate('gift', this)">
+    <span class="icon">&#127873;</span> 礼品码
+  </div>
+  <div class="nav-item" onclick="navigate('account', this)">
+    <span class="icon">&#128100;</span> 我的账户
   </div>
 </div>
 
-<!-- 主界面 -->
-<div id="main-page" class="container">
-  <button class="logout-btn danger" onclick="doLogout()">退出</button>
-  <h1>AI-CHAT</h1>
-  <p style="text-align:center;color:#9ca3af;margin-bottom:20px">欢迎, <span id="username-display"></span></p>
-
-  <div class="tabs">
-    <button id="tab-chat" class="active" onclick="switchTab('chat')">聊天</button>
-    <button id="tab-keys" onclick="switchTab('keys')">API Keys</button>
-    <button id="tab-gift" onclick="switchTab('gift')">礼品码</button>
+<!-- 登录/注册 -->
+<div id="login-page" class="page active">
+  <div class="card" id="login-card">
+    <h3 style="text-align:center">AI-CHAT 登录</h3>
+    <div class="error-msg" id="login-error"></div>
+    <input id="login-username" placeholder="用户名">
+    <input id="login-password" type="password" placeholder="密码" onkeydown="if(event.key==='Enter')doLogin()">
+    <button onclick="doLogin()" style="width:100%">登录</button>
+    <span class="switch-link" onclick="showRegister()">没有账号？注册</span>
+    <button class="github" onclick="doGithubLogin()" style="width:100%;margin-top:12px">使用 GitHub 登录</button>
   </div>
+  <div class="card" id="register-card" style="display:none">
+    <h3 style="text-align:center">注册</h3>
+    <div class="error-msg" id="register-error"></div>
+    <div class="success-msg" id="register-success"></div>
+    <input id="reg-username" placeholder="用户名">
+    <input id="reg-password" type="password" placeholder="密码">
+    <input id="reg-2fa" placeholder="2FA 密钥（可选）">
+    <button onclick="doRegister()" style="width:100%">注册</button>
+    <span class="switch-link" onclick="showLogin()">已有账号？去登录</span>
+  </div>
+</div>
+
+<!-- 主内容 -->
+<div class="main" id="main-content" style="display:none">
 
   <!-- 聊天 -->
-  <div id="chat" class="tab-content active">
+  <div id="page-chat" class="page active">
     <div class="card">
-      <div class="chat-box" id="chat-box"></div>
-      <div style="display:flex;gap:8px">
-        <input id="chat-input" placeholder="输入消息..." style="margin-bottom:0" onkeydown="if(event.key==='Enter')doChat()">
-        <button onclick="doChat()" style="width:auto;padding:12px 24px;margin-bottom:0">发送</button>
+      <div class="model-row">
+        <label>选择模型：</label>
+        <select id="model-select">
+          <option value="llama">Meta Llama 3.1 8B Instruct</option>
+          <option value="mistral">Mistral 7B Instruct</option>
+          <option value="gemma">Google Gemma 2 9B</option>
+          <option value="qwen">Qwen 1.5 7B Chat</option>
+        </select>
+      </div>
+      <div class="chat-box" id="chat-box">
+        <div class="msg ai">你好！我是 AI 助手，有什么可以帮你的？</div>
+      </div>
+      <div class="row">
+        <input id="chat-input" placeholder="输入消息..." onkeydown="if(event.key==='Enter')doChat()">
+        <button onclick="doChat()">发送</button>
       </div>
     </div>
   </div>
 
   <!-- API Keys -->
-  <div id="keys" class="tab-content">
+  <div id="page-keys" class="page">
     <div class="card">
       <h3>我的 API Keys</h3>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input id="key-name" placeholder="Key 名称（可选）" style="margin-bottom:0">
-        <button onclick="createKey()" style="width:auto;margin-bottom:0">创建 API Key</button>
+      <p class="key-limit" id="key-limit-text">加载中...</p>
+      <div class="row" style="margin-bottom:12px">
+        <input id="key-name" placeholder="Key 名称（可选）">
+        <button onclick="createKey()" id="create-key-btn">创建</button>
       </div>
-      <div id="key-list"></div>
+      <div id="key-list"><p style="color:#9ca3af">加载中...</p></div>
     </div>
   </div>
 
   <!-- 礼品码 -->
-  <div id="gift" class="tab-content">
+  <div id="page-gift" class="page">
     <div class="card">
       <h3>兑换礼品码</h3>
-      <div style="display:flex;gap:8px">
-        <input id="gift-code" placeholder="输入礼品码" style="margin-bottom:0">
-        <button onclick="redeemGift()" style="width:auto;margin-bottom:0">兑换</button>
+      <div class="gift-row">
+        <input id="gift-code" placeholder="输入礼品码">
+        <button onclick="redeemGift()">兑换</button>
+      </div>
+      <p id="gift-msg" style="margin-top:10px;font-size:14px"></p>
+    </div>
+  </div>
+
+  <!-- 账户 -->
+  <div id="page-account" class="page">
+    <div class="card">
+      <h3>欢迎, <span id="account-username">-</span></h3>
+      <div class="account-row">
+        <label>Token 用量</label>
+        <span class="value" id="account-tokens">47,231 / 100,000</span>
+      </div>
+      <div class="account-row">
+        <label>2FA</label>
+        <span class="value" id="account-2fa">-</span>
+      </div>
+      <div class="account-row">
+        <label>注册时间</label>
+        <span class="value" id="account-created">-</span>
+      </div>
+      <div style="margin-top:20px">
+        <button class="danger" onclick="doLogout()">退出</button>
       </div>
     </div>
   </div>
+
 </div>
 
 <script>
-// ========== 初始化 ==========
-const TOKEN = new URLSearchParams(location.search).get('t');
+// ========== 全局状态 ==========
+var token = null;
+var currentUser = null;
+var totalCreated = 0;
+var maxKeys = 3;
 
-if (!TOKEN) {
-  document.getElementById('login-page').style.display = 'block';
-  document.getElementById('main-page').style.display = 'none';
-} else {
-  document.getElementById('login-page').style.display = 'none';
-  fetch('/api/me?t=' + TOKEN)
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        document.getElementById('main-page').style.display = 'block';
-        document.getElementById('username-display').textContent = data.user.username;
-        loadKeys();
-      } else {
-        document.getElementById('login-page').style.display = 'block';
-      }
-    })
-    .catch(() => {
-      document.getElementById('login-page').style.display = 'block';
-    });
-}
-
-// ========== 登录/注册切换 ==========
-function toggleForm() {
-  const lf = document.getElementById('login-form');
-  const rf = document.getElementById('register-form');
-  const title = document.getElementById('form-title');
-  if (lf.style.display !== 'none') {
-    lf.style.display = 'none'; rf.style.display = 'block';
-    title.textContent = '注册';
-  } else {
-    lf.style.display = 'block'; rf.style.display = 'none';
-    title.textContent = 'AI-CHAT 登录';
+// ========== 统一请求函数 ==========
+function request(path, options) {
+  var opts = options || {};
+  opts.headers = { 'Content-Type': 'application/json' };
+  if (opts.body && typeof opts.body !== 'string') {
+    opts.body = JSON.stringify(opts.body);
   }
-  document.getElementById('msg').innerHTML = '';
+  return fetch(path, opts).then(function(r) { return r.json(); });
 }
 
-// ========== 注册 ==========
-function doRegister() {
-  const msg = document.getElementById('msg');
-  const username = document.getElementById('reg-username').value.trim();
-  const password = document.getElementById('reg-password').value;
-  if (!username || !password) { msg.innerHTML = '<p class="error">用户名和密码不能为空</p>'; return; }
-  fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) { msg.innerHTML = '<p class="success">注册成功，请登录</p>'; toggleForm(); }
-    else msg.innerHTML = '<p class="error">' + d.msg + '</p>';
-  })
-  .catch(() => { msg.innerHTML = '<p class="error">网络错误</p>'; });
-}
-
-// ========== 登录 ==========
-function doLogin() {
-  const msg = document.getElementById('msg');
-  const username = document.getElementById('username').value.trim();
-  const password = document.getElementById('password').value;
-  const totp = document.getElementById('totp-code').value;
-  if (!username || !password) { msg.innerHTML = '<p class="error">用户名和密码不能为空</p>'; return; }
-  fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, totp_code: totp })
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      location.href = '/?t=' + d.token;
-    } else {
-      if (d.need_totp) {
-        document.getElementById('totp-code').style.display = 'block';
-        msg.innerHTML = '<p class="error">' + d.msg + '</p>';
-      } else {
-        msg.innerHTML = '<p class="error">' + d.msg + '</p>';
-      }
+// ========== 路由分发器 ==========
+var api = {
+  auth: {
+    register: function(username, password, tfa) {
+      return request('/api/register', { method: 'POST', body: { username: username, password: password, tfa: tfa } });
+    },
+    login: function(username, password) {
+      return request('/api/login', { method: 'POST', body: { username: username, password: password } });
+    },
+    me: function() {
+      return request('/api/me?t=' + encodeURIComponent(token), { method: 'GET' });
     }
-  })
-  .catch(() => { msg.innerHTML = '<p class="error">网络错误</p>'; });
+  },
+  chat: {
+    send: function(message, model) {
+      return request('/api/chat', { method: 'POST', body: { message: message, model: model, token: token } });
+    }
+  },
+  keys: {
+    list: function() {
+      return request('/api/keys/list?t=' + encodeURIComponent(token), { method: 'GET' });
+    },
+    create: function(name) {
+      return request('/api/keys/create', { method: 'POST', body: { token: token, name: name } });
+    },
+    delete: function(id) {
+      return request('/api/keys/delete/' + id + '?t=' + encodeURIComponent(token), { method: 'DELETE' });
+    }
+  },
+  gift: {
+    redeem: function(code) {
+      return request('/api/gift/redeem', { method: 'POST', body: { token: token, code: code } });
+    }
+  }
+};
+
+// ========== 初始化 ==========
+(function init() {
+  var params = new URLSearchParams(window.location.search);
+  token = params.get('t');
+  if (token) {
+    checkAuth();
+  } else {
+    showLoginPage();
+  }
+})();
+
+function showLoginPage() {
+  document.getElementById('login-page').style.display = 'block';
+  document.getElementById('login-page').classList.add('active');
+  document.getElementById('main-content').style.display = 'none';
+  document.getElementById('topbar').style.display = 'none';
 }
 
-// ========== 登出 ==========
+function showMainPage() {
+  document.getElementById('login-page').style.display = 'none';
+  document.getElementById('login-page').classList.remove('active');
+  document.getElementById('main-content').style.display = 'block';
+  document.getElementById('topbar').style.display = 'flex';
+  loadKeys();
+  loadAccount();
+}
+
+// ========== 登录/注册 ==========
+function showLogin() {
+  document.getElementById('login-card').style.display = 'block';
+  document.getElementById('register-card').style.display = 'none';
+}
+function showRegister() {
+  document.getElementById('login-card').style.display = 'none';
+  document.getElementById('register-card').style.display = 'block';
+}
+
+function checkAuth() {
+  api.auth.me().then(function(data) {
+    if (data.ok) {
+      currentUser = data.user;
+      showMainPage();
+    } else {
+      token = null;
+      showLoginPage();
+    }
+  }).catch(function() { showLoginPage(); });
+}
+
+function doLogin() {
+  var username = document.getElementById('login-username').value.trim();
+  var password = document.getElementById('login-password').value;
+  var err = document.getElementById('login-error');
+  err.style.display = 'none';
+  if (!username || !password) { err.textContent = '请填写用户名和密码'; err.style.display = 'block'; return; }
+
+  api.auth.login(username, password).then(function(data) {
+    if (data.ok) {
+      token = data.token;
+      window.history.replaceState(null, '', '/?t=' + data.token);
+      checkAuth();
+    } else {
+      err.textContent = data.msg || '登录失败';
+      err.style.display = 'block';
+    }
+  });
+}
+
+function doRegister() {
+  var username = document.getElementById('reg-username').value.trim();
+  var password = document.getElementById('reg-password').value;
+  var tfa = document.getElementById('reg-2fa').value.trim();
+  var err = document.getElementById('register-error');
+  var suc = document.getElementById('register-success');
+  err.style.display = 'none'; suc.style.display = 'none';
+  if (!username || !password) { err.textContent = '请填写用户名和密码'; err.style.display = 'block'; return; }
+
+  api.auth.register(username, password, tfa).then(function(data) {
+    if (data.ok) {
+      suc.textContent = '注册成功！请登录';
+      suc.style.display = 'block';
+      setTimeout(showLogin, 1200);
+    } else {
+      err.textContent = data.msg || '注册失败';
+      err.style.display = 'block';
+    }
+  });
+}
+
 function doLogout() {
-  fetch('/api/logout?t=' + TOKEN, { method: 'POST' })
-    .then(() => { location.href = '/'; })
-    .catch(() => { location.href = '/'; });
+  token = null;
+  window.history.replaceState(null, '', '/');
+  showLoginPage();
 }
 
-// ========== Tab 切换 ==========
-function switchTab(name) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
-  document.getElementById(name).classList.add('active');
-  document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'keys') loadKeys();
+function doGithubLogin() {
+  window.location.href = '/api/auth/github';
+}
+
+// ========== 侧边栏 ==========
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+
+function navigate(page, el) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
 }
 
 // ========== 聊天 ==========
 function doChat() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
+  var input = document.getElementById('chat-input');
+  var text = input.value.trim();
   if (!text) return;
-  const box = document.getElementById('chat-box');
+  var sel = document.getElementById('model-select');
+  var model = sel.value;
+  var modelName = sel.options[sel.selectedIndex].text;
+  var box = document.getElementById('chat-box');
   box.innerHTML += '<div class="msg user">' + escapeHtml(text) + '</div>';
   input.value = '';
   box.scrollTop = box.scrollHeight;
 
-  const loadingId = 'msg-' + Date.now();
-  box.innerHTML += '<div class="msg ai" id="' + loadingId + '"><span style="color:#9ca3af">思考中...</span></div>';
+  var loadingId = 'msg-' + Date.now();
+  box.innerHTML += '<div class="msg ai" id="' + loadingId + '"><span style="color:#9ca3af">[' + escapeHtml(modelName) + '] 思考中...</span></div>';
   box.scrollTop = box.scrollHeight;
 
-  fetch('/api/chat?t=' + TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: text })
-  })
-  .then(r => r.json())
-  .then(d => {
-    document.getElementById(loadingId).innerHTML = d.reply ? renderMarkdown(d.reply) : '<span style="color:#ef4444">请求失败，请重试</span>';
+  api.chat.send(text, model).then(function(data) {
+    if (data.ok) {
+      document.getElementById(loadingId).innerHTML = '<span style="color:#9ca3af">[' + escapeHtml(modelName) + ']</span><br>' + escapeHtml(data.reply);
+    } else {
+      document.getElementById(loadingId).innerHTML = '<span style="color:#ef4444">请求失败：' + escapeHtml(data.msg || '未知错误') + '</span>';
+    }
     box.scrollTop = box.scrollHeight;
-  })
-  .catch(() => {
+  }).catch(function() {
     document.getElementById(loadingId).innerHTML = '<span style="color:#ef4444">网络错误</span>';
   });
 }
 
 // ========== API Keys ==========
 function loadKeys() {
-  fetch('/api/apikeys?t=' + TOKEN)
-    .then(r => r.json())
-    .then(d => {
-      const list = document.getElementById('key-list');
-      if (!d.ok || !d.data || d.data.length === 0) { list.innerHTML = '<p style="color:#9ca3af">暂无 API Key，创建一个吧</p>'; return; }
-      list.innerHTML = d.data.map(k => '<div class="key-item"><code>' + k.key + '</code><span>已用: ' + (k.used_tokens||0) + '/' + (k.token_limit||100000) + '</span><button class="danger" style="width:auto;padding:6px 12px;margin:0" onclick="deleteKey(\'' + k.key + '\')">删除</button></div>').join('');
-    })
-    .catch(() => { document.getElementById('key-list').innerHTML = '<p class="error">加载失败</p>'; });
+  api.keys.list().then(function(data) {
+    var list = document.getElementById('key-list');
+    var limitText = document.getElementById('key-limit-text');
+    if (data.ok) {
+      totalCreated = data.keys.length;
+      limitText.textContent = '已创建 ' + totalCreated + ' / ' + maxKeys + ' 个（含已删除）';
+      if (totalCreated >= maxKeys) {
+        document.getElementById('create-key-btn').disabled = true;
+        document.getElementById('create-key-btn').textContent = '已达上限';
+      }
+      if (data.keys.length === 0) {
+        list.innerHTML = '<p style="color:#9ca3af">暂无 API Key，创建一个吧</p>';
+      } else {
+        list.innerHTML = '';
+        data.keys.forEach(function(k) {
+          var div = document.createElement('div');
+          div.className = 'key-item';
+          div.innerHTML = '<code>' + k.key_value + '</code><span>' + (k.name || 'default') + '</span><button class="danger" onclick="deleteKey(' + k.id + ')">删除</button>';
+          list.appendChild(div);
+        });
+      }
+    } else {
+      list.innerHTML = '<p style="color:#ef4444">加载失败</p>';
+    }
+  });
 }
 
 function createKey() {
-  const name = document.getElementById('key-name').value.trim();
-  fetch('/api/apikeys?t=' + TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name || 'default' })
-  })
-  .then(r => r.json())
-  .then(d => { if (d.ok) { document.getElementById('key-name').value = ''; loadKeys(); } })
-  .catch(() => alert('创建失败'));
+  if (totalCreated >= maxKeys) {
+    alert('最多只能创建 ' + maxKeys + ' 个 API Key（含已删除的），不能做公益哦 😏');
+    return;
+  }
+  var name = document.getElementById('key-name').value.trim();
+  api.keys.create(name).then(function(data) {
+    if (data.ok) {
+      document.getElementById('key-name').value = '';
+      loadKeys();
+    } else {
+      alert(data.msg || '创建失败');
+    }
+  });
 }
 
-function deleteKey(key) {
+function deleteKey(id) {
   if (!confirm('确定删除这个 API Key？')) return;
-  fetch('/api/apikeys/delete?t=' + TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key })
-  })
-  .then(r => r.json())
-  .then(d => { if (d.ok) loadKeys(); })
-  .catch(() => alert('删除失败'));
+  api.keys.delete(id).then(function(data) {
+    if (data.ok) { loadKeys(); }
+    else { alert(data.msg || '删除失败'); }
+  });
 }
 
 // ========== 礼品码 ==========
 function redeemGift() {
-  const code = document.getElementById('gift-code').value.trim();
-  if (!code) return;
-  fetch('/api/gift?t=' + TOKEN, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  })
-  .then(r => r.json())
-  .then(d => { alert(d.msg); if (d.ok) document.getElementById('gift-code').value = ''; })
-  .catch(() => alert('兑换失败'));
+  var code = document.getElementById('gift-code').value.trim();
+  var msg = document.getElementById('gift-msg');
+  if (!code) { msg.style.color = '#ef4444'; msg.textContent = '请输入礼品码'; return; }
+  api.gift.redeem(code).then(function(data) {
+    if (data.ok) {
+      msg.style.color = '#22c55e';
+      msg.textContent = data.msg || '兑换成功！';
+      document.getElementById('gift-code').value = '';
+    } else {
+      msg.style.color = '#ef4444';
+      msg.textContent = data.msg || '兑换失败';
+    }
+  });
 }
 
-// ========== 工具函数 ==========
+// ========== 账户 ==========
+function loadAccount() {
+  if (!currentUser) return;
+  document.getElementById('account-username').textContent = currentUser.username || '-';
+  document.getElementById('account-2fa').textContent = currentUser.tfa_enabled ? '已绑定' : '未绑定';
+  var created = currentUser.created_at;
+  if (created) {
+    var d = new Date(created);
+    document.getElementById('account-created').textContent = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  } else {
+    document.getElementById('account-created').textContent = '-';
+  }
+}
+
+// ========== 工具 ==========
 function escapeHtml(text) {
-  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-  return text.replace(/[&<>"']/g, m => map[m]);
-}
-
-function renderMarkdown(text) {
-  return escapeHtml(text)
-    .replace(/\n/g, '<br>')
-    .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
-    .replace(/`([^`]+)`/g, '<code style="background:#0f1117;padding:2px 6px;border-radius:4px">$1</code>');
+  var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 </script>
 </body>
